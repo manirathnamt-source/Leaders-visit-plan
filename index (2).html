@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<title>Visit Tracker</title>
+<style>
+  :root {
+    --navy:#1a2850;
+    --primary:#1a73e8;
+    --primary-dark:#174ea6;
+    --success:#188038;
+    --danger:#d93025;
+    --warning:#f9ab00;
+    --bg:#f5f7fa;
+    --card:#ffffff;
+    --text:#202124;
+    --muted:#5f6368;
+    --border:#dadce0;
+    --weekend-bg:#fff9e0;
+    --weekend-header:#394670;
+    --admin:#6b21a8;
+    --cluster:#0b6b46;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);padding:14px}
+  button{cursor:pointer;border:none;border-radius:6px;padding:9px 16px;font-size:13px;font-weight:500;transition:all .15s}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:hover{background:var(--primary-dark)}
+  .btn-primary:disabled{background:#9aa0a6;cursor:not-allowed}
+  .btn-secondary{background:#fff;color:var(--primary);border:1px solid var(--border)}
+  .btn-secondary:hover{background:#f1f3f4}
+  .btn-danger{background:#fff;color:var(--danger);border:1px solid var(--danger)}
+  .btn-danger:hover{background:#fce8e6}
+  .btn-success{background:var(--success);color:#fff}
+  .btn-success:hover{background:#0f6b2f}
+  .btn-reject{background:#fff;color:var(--danger);border:1px solid var(--danger)}
+  .btn-sm{padding:4px 10px;font-size:12px}
+  input,select,textarea{font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:#fff}
+
+  /* Login */
+  #login-view{max-width:440px;margin:60px auto;background:var(--card);padding:36px 32px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  #login-view h1{font-size:22px;margin-bottom:6px;color:var(--primary)}
+  #login-view p{color:var(--muted);font-size:14px;margin-bottom:24px}
+  #login-view label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  #login-view input{width:100%;margin-bottom:14px;padding:10px 12px;font-size:14px}
+  #login-view select{width:100%;margin-bottom:14px;padding:10px 12px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:#fff}
+  #login-view button{width:100%;padding:12px}
+  #login-error{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
+
+  #app-view{display:none}
+  .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--card);padding:12px 16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:10px}
+  .topbar h1{font-size:16px;color:var(--primary);font-weight:600}
+  .topbar .right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .role-pill{padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;letter-spacing:.3px;color:#fff}
+  .role-pill.RM{background:var(--primary)}
+  .role-pill.CM{background:var(--cluster)}
+  .role-pill.Admin{background:var(--admin)}
+  .refresh-indicator{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .refresh-dot{width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  /* Scope bar (cluster/admin) */
+  .scope-bar{
+    background:#eef4ff;border:1px solid #c7d8ff;padding:10px 14px;border-radius:8px;
+    margin-bottom:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px;
+  }
+  .scope-bar.admin{background:#f4e8fa;border-color:#d4a6eb}
+  .scope-bar label{font-weight:600;color:var(--text)}
+  .scope-bar select{min-width:180px}
+
+  .settings-bar{background:#fff9e6;border:1px solid #f9ab00;padding:10px 14px;border-radius:8px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px}
+  .settings-bar.configured{background:#e6f4ea;border-color:#34a853}
+  .settings-bar label{font-weight:600;color:var(--text)}
+  .settings-bar select{min-width:200px}
+  .view-only-banner{background:#eef4ff;border:1px solid #c7d8ff;color:var(--primary-dark);padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:12px}
+
+  /* Tabs */
+  .tabs{display:flex;gap:4px;background:var(--card);padding:6px;border-radius:10px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex-wrap:wrap}
+  .tab-btn{flex:1;min-width:110px;background:transparent;color:var(--muted);padding:10px 14px;border-radius:6px;font-weight:500}
+  .tab-btn.active{background:var(--primary);color:#fff}
+  .tab-btn:hover:not(.active){background:#f1f3f4;color:var(--text)}
+  .tab-btn .badge-count{background:var(--danger);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px}
+  .tab-btn.active .badge-count{background:#fff;color:var(--danger)}
+
+  /* Travel mode toggle */
+  .mode-toggle{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fff}
+
+  /* Report Range bar */
+  .range-bar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:#f5f7fa;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+  .range-bar label{color:var(--muted);font-weight:500}
+  .range-bar input[type="date"]{padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:#fff}
+  .range-bar.multi-month{background:#fff8e1;border-bottom-color:#ffcc80}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .mode-btn{background:transparent;color:var(--muted);padding:7px 14px;font-size:13px;font-weight:500;border-radius:0;border-right:1px solid var(--border)}
+  .mode-btn:last-child{border-right:none}
+  .mode-btn:hover{background:#f1f3f4}
+  .mode-btn.active{background:var(--primary);color:#fff}
+  .mode-btn.active:hover{background:var(--primary-dark)}
+
+  /* Per-day mode dropdown in Travel Log */
+  .day-mode-select{padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:#fff;cursor:pointer}
+  .day-mode-select:hover{border-color:var(--primary)}
+  .day-mode-select:focus{outline:2px solid var(--primary);outline-offset:1px}
+
+  .panel{display:none}
+  .panel.active{display:block}
+
+  /* Visit Plan */
+  .vp-header{background:var(--navy);color:#fff;padding:12px 20px;border-top-left-radius:10px;border-top-right-radius:10px;display:flex;flex-wrap:wrap;align-items:center;gap:14px;font-size:14px;font-weight:500}
+  .vp-header .rm-name{font-weight:700;font-size:15px}
+  .vp-header .divider{color:#ffffff55;font-weight:300}
+  .vp-header .pill{background:#ffffff22;padding:3px 10px;border-radius:12px;font-size:13px}
+
+  .vp-month-row{background:var(--card);padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;gap:14px;font-size:13px}
+  .vp-month-row label{color:var(--muted);font-weight:500}
+  .vp-month-row .month-pick{background:#fef7e0;border:1px solid #f9ab00;border-radius:4px;padding:5px 10px;font-weight:600;color:#5f4b00}
+  .vp-subtitle{color:var(--primary-dark);font-weight:500}
+
+  .vp-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);background:var(--card);border-bottom:1px solid var(--border)}
+  .vp-kpi{padding:10px 14px;border-right:1px solid var(--border);text-align:center}
+  .vp-kpi:last-child{border-right:none}
+  .vp-kpi .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 0;border-radius:4px;margin-bottom:4px;display:block;color:#fff}
+  .vp-kpi .value{font-size:22px;font-weight:700;color:var(--text)}
+  .vp-kpi.total .label{background:#1a73e8}
+  .vp-kpi.covered .label{background:#34a853}
+  .vp-kpi.cm .label{background:#8430ce}
+  .vp-kpi.notvis .label{background:#ea4335}
+  .vp-kpi.reimb .label{background:#fb8c00}
+
+  .vp-legend{background:var(--card);padding:8px 12px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px}
+  .legend-item{display:flex;align-items:center;padding:2px 6px;gap:4px}
+  .legend-badge{display:inline-block;min-width:28px;padding:2px 6px;border-radius:3px;color:#fff;font-weight:700;font-size:11px;text-align:center}
+
+  .vp-grid-wrap{background:var(--card);overflow-x:auto;border-bottom-left-radius:10px;border-bottom-right-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .vp-grid{border-collapse:collapse;font-size:12px;min-width:100%}
+  .vp-grid th,.vp-grid td{border:1px solid #e5e7eb;padding:0;text-align:center;height:34px;white-space:nowrap}
+  .vp-grid thead th{background:var(--navy);color:#fff;font-weight:600;font-size:11px;padding:6px 8px;position:sticky;top:0;z-index:3}
+  .vp-grid thead th.sticky-col{z-index:5}
+  .vp-grid thead th.day-header{min-width:50px;line-height:1.2;padding:5px 2px}
+  .vp-grid thead th.day-header small{display:block;font-size:10px;opacity:.85;font-weight:400}
+  .vp-grid thead th.day-header.weekend{background:var(--weekend-header)}
+  .vp-grid tbody td.sticky-col{background:#f8f9fa;font-weight:500;text-align:left;padding:6px 10px}
+  .vp-grid tbody td.store-cell{font-weight:600}
+  .vp-grid tbody td.cm-cell{color:var(--muted);font-style:italic;font-size:11px}
+  .vp-grid tbody tr.additional-row td.sticky-col{background:#fff4e5;color:#a05a00}
+  .vp-grid tbody tr.additional-row td.store-cell::before{content:'+ ';color:var(--warning);font-weight:700}
+  .sticky-col{position:sticky;left:0;z-index:2}
+  .sticky-col.col2{left:170px}
+  .vp-grid thead th.sticky-col{left:0}
+  .vp-grid thead th.sticky-col.col2{left:170px}
+  .vp-grid tbody td.day-cell{padding:0;min-width:50px;position:relative}
+  .vp-grid tbody td.day-cell.weekend{background:var(--weekend-bg)}
+  .day-select{width:100%;height:32px;border:none;background:transparent;font-size:11px;font-weight:700;text-align:center;text-align-last:center;cursor:pointer;color:var(--muted);appearance:none;-webkit-appearance:none;-moz-appearance:none;padding:0 2px}
+  .day-select:focus{outline:2px solid var(--primary);outline-offset:-2px}
+  .day-cell.has-value{color:#fff}
+  .day-cell.has-value .day-select{color:#fff}
+  .day-cell.cell-disabled{background:#e0e0e0 !important;cursor:not-allowed}
+  .day-cell.cell-disabled .day-select{cursor:not-allowed;color:#999}
+  .day-cell.type-R{background:#34a853}
+  .day-cell.type-A{background:#1a73e8}
+  .day-cell.type-CM{background:#d01884}
+  .day-cell.type-E{background:#ea4335}
+  .day-cell.type-O{background:#8430ce}
+  .day-cell.type-S{background:#00897b}
+  .day-cell.type-H{background:#9aa0a6}
+  .day-cell.type-OFC{background:#f9ab00}
+  .day-cell.type-L{background:#fb8c00}
+  .day-cell.type-WO{background:#616161}
+  .day-cell.type-WOH{background:#9e9e9e;background-image:linear-gradient(135deg,#9e9e9e 50%,#cfcfcf 50%)}
+  .locked-badge{display:inline-block;width:100%;height:32px;line-height:32px;color:#fff;font-weight:700;font-size:11px}
+  .locked-badge.empty{color:var(--muted);background:#fafbfc}
+  .vp-submit-bar{background:var(--card);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1px solid var(--border)}
+  .locked-indicator{background:#fef7e0;color:#5f4b00;padding:6px 12px;border-radius:20px;font-size:13px;font-weight:500}
+  .additional-store-select{width:100%;padding:4px 8px;font-size:11px;border:1px dashed #f9ab00;background:#fffdf5;border-radius:4px;font-weight:600;color:var(--text)}
+
+  /* Generic panels */
+  .panel.other{background:var(--card);padding:20px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .panel-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+  .panel-head h2{font-size:16px;color:var(--primary);font-weight:600}
+
+  .table-wrap{overflow-x:auto}
+  table.data{width:100%;border-collapse:collapse;font-size:14px}
+  table.data thead th{background:#f1f3f4;text-align:left;padding:10px 12px;font-weight:600;color:var(--muted);border-bottom:2px solid var(--border);font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  table.data tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+  table.data tbody tr:hover{background:#fafbfc}
+  tr.missed{background:#fce8e6 !important}
+  tr.abnormal{background:#fce8e6 !important}
+  tr.sev-high{background:#fce8e6 !important}
+  tr.sev-medium{background:#fff4e5 !important}
+  tr.sev-info{background:#e8f0fe !important}
+  tr.status-Approved{background:#e6f4ea !important}
+  tr.status-Rejected{opacity:.55}
+  tr.row-base{background:#e8f0fe !important;font-weight:500}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}
+  .badge.good{background:#e6f4ea;color:var(--success)}
+  .badge.mid{background:#fef7e0;color:#b06000}
+  .badge.bad{background:#fce8e6;color:var(--danger)}
+  .badge.base{background:#e8f0fe;color:var(--primary-dark)}
+  .badge.warn{background:#fce8e6;color:var(--danger)}
+  .badge.high{background:#fce8e6;color:var(--danger)}
+  .badge.medium{background:#fef7e0;color:#b06000}
+  .badge.low{background:#e6f4ea;color:var(--success)}
+  .badge.info{background:#e8f0fe;color:var(--primary-dark)}
+  .badge.Open{background:#fef7e0;color:#b06000}
+  .badge.Approved{background:#e6f4ea;color:var(--success)}
+  .badge.Rejected{background:#fce8e6;color:var(--danger)}
+  .total-row{font-weight:600;background:#f8f9fa}
+  .empty{text-align:center;padding:30px;color:var(--muted);font-size:14px}
+
+  .travel-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+  .travel-card{background:#f8f9fa;padding:14px 18px;border-radius:10px;border-left:4px solid var(--primary)}
+  .travel-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-weight:600}
+  .travel-card .value{font-size:24px;font-weight:700;color:var(--text)}
+  .travel-card .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .travel-card.total{border-left-color:var(--success)}
+  .travel-card.avg{border-left-color:var(--warning)}
+  .travel-card.cost{border-left-color:#8430ce}
+  .travel-card.days{border-left-color:var(--primary)}
+
+  .audit-summary,.summary-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+  .audit-card,.summary-card{padding:12px 16px;border-radius:10px;background:#f8f9fa;border-left:4px solid #ccc}
+  .audit-card .label,.summary-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px}
+  .audit-card .value,.summary-card .value{font-size:22px;font-weight:700}
+  .audit-card.total{border-left-color:var(--primary)}
+  .audit-card.unmapped{border-left-color:var(--danger)}
+  .audit-card.planNotVisited{border-left-color:var(--warning)}
+  .audit-card.visitedNotPlanned{border-left-color:#8430ce}
+  .audit-card.offViolation{border-left-color:var(--danger)}
+  .audit-card.open{border-left-color:var(--warning)}
+  .audit-card.approved{border-left-color:var(--success)}
+  .audit-card.rejected{border-left-color:var(--muted)}
+  .summary-card.rm{border-left-color:var(--primary)}
+  .summary-card.visits{border-left-color:var(--success)}
+  .summary-card.km{border-left-color:#8430ce}
+  .summary-card.alerts{border-left-color:var(--danger)}
+  .summary-card.completion{border-left-color:var(--warning)}
+
+  .warning-box{background:#fef7e0;border:1px solid #f9ab00;color:#5f4b00;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px}
+  .top-perf-banner{background:linear-gradient(135deg,#faf5ff,#fff);padding:10px 14px;border-radius:8px;border-left:4px solid #8430ce;margin-bottom:12px;font-size:13px}
+  .action-row{display:flex;gap:6px;flex-wrap:wrap}
+
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:12px 18px;border-radius:6px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.2);opacity:0;transition:opacity .25s;z-index:1000;max-width:380px}
+  .toast.show{opacity:1}
+  .toast.error{background:var(--danger)}
+  .toast.success{background:var(--success)}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .rank-1{color:#b06000;font-weight:700}
+  .rank-2{color:#616161;font-weight:700}
+  .rank-3{color:#a05a00;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- ========== LOGIN ========== -->
+<div id="login-view">
+  <h1>Visit Tracker</h1>
+  <p>Select your name and designation to sign in.</p>
+  <label>Name</label>
+  <select id="login-name" onchange="onLoginNameChange()">
+    <option value="">Loading names…</option>
+  </select>
+  <label>Designation</label>
+  <select id="login-designation">
+    <option value="RM">RM (Regional Manager)</option>
+    <option value="CM">CM (Cluster Manager)</option>
+    <option value="Admin">Admin</option>
+  </select>
+  <button class="btn-primary" id="login-btn" onclick="doLogin()">Sign In</button>
+  <div id="login-error"></div>
+</div>
+
+<!-- ========== MAIN APP ========== -->
+<div id="app-view">
+
+  <div class="topbar">
+    <h1>📊 Visit Tracker</h1>
+    <div class="right">
+      <span id="role-pill" class="role-pill"></span>
+      <span id="user-label" style="font-size:13px;color:var(--muted);font-weight:500"></span>
+      <label style="font-size:12px;color:var(--muted)">Plan Month:</label>
+      <input type="month" id="month-picker" onchange="onMonthChange()">
+      <span class="refresh-indicator">
+        <span class="refresh-dot"></span>
+        <span id="refresh-status">Auto-refresh on</span>
+      </span>
+      <button class="btn-secondary" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Report Range bar (applies to analytics tabs: Planned vs Actual, Travel Log, Audit, Summary) -->
+  <div id="range-bar" class="range-bar">
+    <span>📅</span>
+    <label>Report Range:</label>
+    <input type="date" id="range-from" onchange="onRangeChange()">
+    <span style="color:var(--muted)">to</span>
+    <input type="date" id="range-to" onchange="onRangeChange()">
+    <button type="button" class="btn-secondary btn-sm" onclick="resetRangeToMonth()"
+            title="Reset to the full Plan Month selected above">Match month</button>
+    <span id="range-status" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+  </div>
+
+  <!-- Scope bar (CM / Admin) -->
+  <div id="scope-bar" class="scope-bar" style="display:none">
+    <span id="scope-icon">🏢</span>
+    <span id="scope-label"></span>
+    <label>Cluster:</label>
+    <select id="cluster-select" onchange="onClusterChange()"></select>
+    <label>Viewing RM:</label>
+    <select id="rm-select" onchange="onRMChange()"></select>
+    <button class="btn-secondary btn-sm" onclick="showSummaryView()">📊 Scope Summary</button>
+  </div>
+
+  <!-- RM-only: OWN / CM selector (RMs can view their CMs' data read-only) -->
+  <div id="rm-view-bar" class="scope-bar" style="display:none;background:#eef6ff;border-bottom-color:#9ccbff">
+    <span>👁️</span>
+    <label>Viewing:</label>
+    <select id="rm-view-select" onchange="onRMViewChange()">
+      <option value="__OWN__">OWN (my own data)</option>
+    </select>
+    <span id="rm-view-hint" style="color:var(--muted);font-size:12px"></span>
+  </div>
+
+  <div id="settings-bar" class="settings-bar" style="display:none">
+    <span>🏠</span>
+    <label>Base Store:</label>
+    <select id="base-store-select"></select>
+    <button class="btn-primary" onclick="saveBaseStore()" id="save-base-btn">Save</button>
+    <span style="color:var(--muted);margin:0 8px">|</span>
+    <span>🚗</span>
+    <label title="Default mode applied to days you haven't set individually in Travel Log">Default Mode:</label>
+    <div class="mode-toggle">
+      <button type="button" class="mode-btn" data-mode="Car"  onclick="setTravelMode('Car')">🚗 Car</button>
+      <button type="button" class="mode-btn" data-mode="Bike" onclick="setTravelMode('Bike')">🏍️ Bike</button>
+    </div>
+    <span id="base-status" style="color:var(--muted);font-size:12px"></span>
+  </div>
+
+  <div id="view-only-banner" class="view-only-banner" style="display:none">
+    👁️ <b>View-only mode</b> — you can browse this RM's data but cannot make changes.
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="plan"    onclick="switchTab('plan')">📅 Visit Plan</button>
+    <button class="tab-btn"        data-tab="actual"  onclick="switchTab('actual')">✅ Planned vs Actual</button>
+    <button class="tab-btn"        data-tab="travel"  onclick="switchTab('travel')">🚗 Travel Log</button>
+    <button class="tab-btn"        data-tab="audit"   onclick="switchTab('audit')">🔍 Audit <span id="audit-count" class="badge-count" style="display:none">0</span></button>
+    <button class="tab-btn"        data-tab="summary" id="tab-summary" onclick="switchTab('summary')" style="display:none">📊 Summary</button>
+  </div>
+
+  <div class="panel active" id="panel-plan"><div id="visit-plan-container"><div class="empty">Loading…</div></div></div>
+
+  <div class="panel other" id="panel-actual">
+    <div id="top-perf-box"></div>
+    <div class="panel-head">
+      <h2>Planned vs Actual Visits</h2>
+      <small style="color:var(--muted)">Rows in red = missed visits</small>
+    </div>
+    <div id="actual-content"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="panel other" id="panel-travel">
+    <div class="panel-head">
+      <h2>Monthly Travel Log (Actual)</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <small style="color:var(--muted)">Haversine · Outstation stores excluded</small>
+        <button class="btn-secondary" onclick="exportTravelCSV()">📥 Export CSV</button>
+      </div>
+    </div>
+    <div id="travel-content"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="panel other" id="panel-audit">
+    <div class="panel-head">
+      <h2>Audit Log</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <small style="color:var(--muted)">Discrepancies between plan & actual</small>
+        <button class="btn-secondary" onclick="exportAuditCSV()">📥 Export CSV</button>
+      </div>
+    </div>
+    <div id="audit-content"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="panel other" id="panel-summary">
+    <div class="panel-head">
+      <h2 id="summary-heading">Scope Summary</h2>
+      <button class="btn-secondary" onclick="exportSummaryCSV()">📥 Export CSV</button>
+    </div>
+    <div id="summary-content"><div class="empty">Loading…</div></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ STATE ============ */
+let actor = null;         // { name, role, cluster }
+let accessibleRMs = [];   // [{ name, cluster }, ...]
+let accessibleCMs = [];   // [{ name, cluster }, ...] — populated on login
+let accessibleClusters = [];
+let selectedCluster = ''; // for Admin
+let currentRM = null;
+let currentMonth = null;
+let currentRange = null;  // { from, to } — null means "use full month"
+let currentData = null;
+let currentSummary = null;
+let refreshTimer = null;
+let isSubmitting = false;
+let draftGrid = {};
+let additionalStores = [];
+
+/* ============ RANGE HELPERS ============ */
+function daysInMonthYM(ym){
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function fullMonthRange(ym){
+  const days = daysInMonthYM(ym);
+  return { from: ym + '-01', to: ym + '-' + String(days).padStart(2, '0') };
+}
+function rangeSpansMonths(r){
+  if (!r || !r.from || !r.to) return false;
+  return r.from.slice(0, 7) !== r.to.slice(0, 7);
+}
+function rangeDayCount(r){
+  if (!r || !r.from || !r.to) return 0;
+  const a = new Date(r.from + 'T00:00:00');
+  const b = new Date(r.to + 'T00:00:00');
+  return Math.round((b - a) / 86400000) + 1;
+}
+function rangeMatchesMonth(r, ym){
+  if (!r || !ym) return true;
+  const full = fullMonthRange(ym);
+  return r.from === full.from && r.to === full.to;
+}
+function formatDatePretty(ymd){
+  if (!ymd) return '';
+  const d = new Date(ymd + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/* ============ UTIL ============ */
+function $(id){ return document.getElementById(id); }
+function showToast(msg, type){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  setTimeout(()=> t.className = 'toast', 3500);
+}
+function currentMonthDefault(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+function monthLabel(ym){
+  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [y, m] = ym.split('-').map(Number);
+  return names[m-1] + '-' + String(y).slice(-2);
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function csvEscape(s){
+  const v = String(s == null ? '' : s);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function formatINR(n){ return '₹' + Number(n || 0).toLocaleString('en-IN', {maximumFractionDigits: 2}); }
+/**
+ * Returns a short filename-safe label for the current range.
+ * Full month: returns the month ('2026-04').
+ * Custom range: returns 'from_to' ('2026-03-15_2026-04-15').
+ */
+function rangeLabel(){
+  if (currentRange && currentMonth && !rangeMatchesMonth(currentRange, currentMonth)){
+    return currentRange.from + '_' + currentRange.to;
+  }
+  return currentMonth || '';
+}
+function downloadCSV(filename, rows){
+  const csv = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function isRM(){ return actor && actor.role === 'RM'; }
+function isCM(){ return actor && actor.role === 'CM'; }
+function isAdmin(){ return actor && actor.role === 'Admin'; }
+function caller(){ return { name: actor.name }; }
+
+/* ============ LOGIN ============ */
+
+// Map of name (lowercase) -> registered role, used to auto-select Designation
+// when the user picks a name. Populated from listLoginNames() on page load.
+let loginNameRoleMap = {};
+
+/**
+ * Runs on page load. Fetches the full list of users and populates the
+ * Name dropdown on the login screen. Works without authentication.
+ */
+function populateLoginNames(){
+  const sel = $('login-name');
+  google.script.run
+    .withSuccessHandler(list => {
+      if (!list || !list.length){
+        sel.innerHTML = '<option value="">-- No users found --</option>';
+        $('login-error').textContent = 'No users in Users sheet. Ask your admin to add you.';
+        return;
+      }
+      loginNameRoleMap = {};
+      const opts = ['<option value="">-- Select your name --</option>'];
+      list.forEach(u => {
+        loginNameRoleMap[u.name.toLowerCase()] = u.role;
+        opts.push('<option value="' + escapeHtml(u.name) + '" data-role="' +
+                  escapeHtml(u.role) + '">' + escapeHtml(u.name) +
+                  ' <span>(' + escapeHtml(u.role) + ')</span></option>');
+      });
+      sel.innerHTML = opts.join('');
+    })
+    .withFailureHandler(err => {
+      sel.innerHTML = '<option value="">-- Error loading names --</option>';
+      $('login-error').textContent = 'Could not load user list: ' + err.message;
+    })
+    .listLoginNames();
+}
+
+/**
+ * When the user selects a name, pre-fill Designation to their recorded role.
+ * The user can still change Designation manually, but a mismatch will be
+ * rejected by the server.
+ */
+function onLoginNameChange(){
+  const name = $('login-name').value;
+  if (!name) return;
+  const role = loginNameRoleMap[name.toLowerCase()];
+  if (role){
+    $('login-designation').value = role;
+  }
+}
+
+function doLogin(){
+  const name = $('login-name').value;
+  const designation = $('login-designation').value;
+  if (!name){ $('login-error').textContent = 'Please select your name.'; return; }
+  if (!designation){ $('login-error').textContent = 'Please select a designation.'; return; }
+
+  const btn = $('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Signing in…';
+  $('login-error').textContent = '';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+      if (res.success){
+        actor = { name: res.name, role: res.role, cluster: res.cluster };
+        accessibleRMs = res.accessibleRMs || [];
+        accessibleCMs = res.accessibleCMs || [];
+        accessibleClusters = res.accessibleClusters || [];
+
+        if (isRM()){
+          currentRM = actor.name;
+          selectedCluster = actor.cluster || '';
+        } else if (isCM()){
+          // CM sees RMs in their cluster
+          selectedCluster = actor.cluster || accessibleClusters[0] || '';
+          const firstInCluster = accessibleRMs.find(r => (r.cluster || '') === selectedCluster);
+          currentRM = firstInCluster ? firstInCluster.name : (accessibleRMs[0] && accessibleRMs[0].name) || null;
+        } else {
+          // Admin: default to first accessible RM
+          selectedCluster = accessibleClusters[0] || '';
+          const firstInCluster = accessibleRMs.find(r => (r.cluster || '') === selectedCluster);
+          currentRM = firstInCluster ? firstInCluster.name : (accessibleRMs[0] && accessibleRMs[0].name) || null;
+        }
+        currentMonth = currentMonthDefault();
+        currentRange = fullMonthRange(currentMonth);
+        $('login-view').style.display = 'none';
+        $('app-view').style.display = 'block';
+        $('month-picker').value = currentMonth;
+        syncRangeInputs();
+        renderRangeStatus();
+        applyRoleUI();        // Hides CM-forbidden tabs (Travel Log)
+        bootstrapAfterLogin();
+      } else {
+        $('login-error').textContent = res.message;
+      }
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+      $('login-error').textContent = 'Server error: ' + err.message;
+    })
+    .login({ name: name, designation: designation });
+}
+
+/**
+ * Role-based UI gating. Called right after login succeeds.
+ *   CM    → hide Travel Log tab + travel-mode toggle in settings bar
+ *   RM    → full access (default)
+ *   Admin → full access (same as RM for tabs; Admin extras land in Phase 5)
+ */
+/**
+ * Role-based UI gating, called right after login succeeds.
+ *
+ *   RM    → full access
+ *   CM    → Travel Log VISIBLE but locked to Bike ₹7/km (no mode toggle)
+ *   Admin → full access
+ *
+ * We hide the Default Mode toggle cluster in the settings bar for CMs so
+ * they can't flip it to Car — the server enforces Bike for CM regardless.
+ */
+function applyRoleUI(){
+  const modeToggle = document.querySelector('.mode-toggle');
+  const cmLock     = isCM();
+
+  if (modeToggle && cmLock){
+    // Walk backwards from the toggle to the nearest "|" divider and hide them all
+    modeToggle.style.display = 'none';
+    let node = modeToggle.previousElementSibling;
+    while (node){
+      const txt = (node.textContent || '').trim();
+      node.style.display = 'none';
+      if (txt === '|') break;
+      node = node.previousElementSibling;
+    }
+  } else if (modeToggle){
+    modeToggle.style.display = '';
+  }
+}
+
+function bootstrapAfterLogin(){
+  // Role pill + user label
+  $('role-pill').textContent = actor.role;
+  $('role-pill').className = 'role-pill ' + actor.role;
+  $('user-label').textContent = actor.name + (actor.cluster ? ' · ' + actor.cluster : '');
+
+  // Scope bar for CM/Admin
+  const scopeBar = $('scope-bar');
+  if (isRM()){
+    scopeBar.style.display = 'none';
+  } else {
+    scopeBar.style.display = 'flex';
+    scopeBar.classList.toggle('admin', isAdmin());
+    $('scope-icon').textContent = isAdmin() ? '👑' : '🏢';
+    $('scope-label').textContent = (isAdmin() ? 'ADMIN' : 'CM') +
+      (actor.cluster ? ' · ' + actor.cluster : '');
+    // Cluster dropdown (Admin gets all; CM gets their single cluster)
+    const clSel = $('cluster-select');
+    if (isAdmin()){
+      clSel.innerHTML = '<option value="">All Clusters</option>' +
+        accessibleClusters.map(c => '<option value="' + escapeHtml(c) + '"' +
+          (c === selectedCluster ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('');
+      clSel.disabled = false;
+    } else {
+      clSel.innerHTML = '<option value="' + escapeHtml(selectedCluster) + '">' + escapeHtml(selectedCluster || '—') + '</option>';
+      clSel.disabled = true;
+    }
+    rebuildRMSelect();
+    $('tab-summary').style.display = 'inline-block';
+  }
+
+  // RM view selector (OWN / CMs under this RM)
+  renderRMViewBar();
+
+  // Set view-only banner + settings-bar based on who's being viewed
+  applyViewingUI();
+
+  loadDashboard();
+  startAutoRefresh();
+}
+
+/**
+ * Shown only for RMs. Lets an RM view their own data OR drill into any CM
+ * under their clusters (read-only). Hidden for CM/Admin who use the scope bar.
+ */
+function renderRMViewBar(){
+  const bar = $('rm-view-bar');
+  if (!isRM() || !accessibleCMs.length){
+    bar.style.display = 'none';
+    return;
+  }
+  const sel = $('rm-view-select');
+  sel.innerHTML = '<option value="__OWN__">OWN (my data)</option>' +
+    accessibleCMs.map(c => '<option value="' + escapeHtml(c.name) + '">CM · ' +
+      escapeHtml(c.name) + (c.cluster ? ' (' + escapeHtml(c.cluster) + ')' : '') +
+      '</option>').join('');
+  sel.value = (currentRM && currentRM !== actor.name) ? currentRM : '__OWN__';
+  $('rm-view-hint').textContent = currentRM === actor.name || !currentRM
+    ? ''
+    : '· Read-only view of ' + currentRM;
+  bar.style.display = 'flex';
+}
+
+/**
+ * Called when an RM picks a different person from the RM-view dropdown.
+ * Value = '__OWN__' or a CM's name.
+ */
+function onRMViewChange(){
+  const val = $('rm-view-select').value;
+  if (val === '__OWN__'){
+    currentRM = actor.name;
+  } else {
+    currentRM = val;
+  }
+  applyViewingUI();
+  loadDashboard();
+}
+
+/**
+ * Recomputes which bars are visible based on the current viewing context.
+ * Call this whenever currentRM changes.
+ */
+function applyViewingUI(){
+  const viewingSelf = isRM() && currentRM &&
+                      String(currentRM).trim().toLowerCase() ===
+                      String(actor.name).trim().toLowerCase();
+
+  // RM viewing a CM (or any non-self) → show the view-only banner, hide settings
+  if (isRM()){
+    $('view-only-banner').style.display = viewingSelf ? 'none' : 'block';
+    $('settings-bar').style.display     = viewingSelf ? 'flex' : 'none';
+  } else {
+    // CM/Admin always view-only for plan editing
+    $('view-only-banner').style.display = 'block';
+    $('settings-bar').style.display     = 'none';
+  }
+
+  // Hint text on the RM-view selector
+  const hint = $('rm-view-hint');
+  if (hint){
+    hint.textContent = viewingSelf ? '' : '· Read-only view of ' + currentRM;
+  }
+}
+
+function rebuildRMSelect(){
+  const rmSel = $('rm-select');
+  const filtered = accessibleRMs.filter(r =>
+    !selectedCluster || (r.cluster || '') === selectedCluster);
+  if (!filtered.length){
+    rmSel.innerHTML = '<option value="">— No RMs —</option>';
+    currentRM = null;
+    return;
+  }
+  rmSel.innerHTML = filtered.map(r =>
+    '<option value="' + escapeHtml(r.name) + '"' +
+    (r.name === currentRM ? ' selected' : '') + '>' +
+    escapeHtml(r.name) + '</option>').join('');
+  // If currentRM not in filtered set, reset to first
+  if (!filtered.some(r => r.name === currentRM)){
+    currentRM = filtered[0].name;
+    rmSel.value = currentRM;
+  }
+}
+
+function onClusterChange(){
+  selectedCluster = $('cluster-select').value;
+  rebuildRMSelect();
+  loadDashboard();
+}
+function onRMChange(){
+  currentRM = $('rm-select').value;
+  if (currentRM) loadDashboard();
+}
+
+function doLogout(){
+  stopAutoRefresh();
+  actor = null; currentData = null; accessibleRMs = []; accessibleCMs = []; currentRM = null;
+  draftGrid = {}; additionalStores = [];
+  $('login-name').value = '';
+  $('login-designation').value = 'RM';
+  $('login-error').textContent = '';
+  $('app-view').style.display = 'none';
+  $('login-view').style.display = 'block';
+  // Refresh the name list in case the admin added users since last login
+  populateLoginNames();
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  $('panel-' + tab).classList.add('active');
+  if (tab === 'summary') loadSummary();
+}
+function showSummaryView(){ switchTab('summary'); }
+
+function onMonthChange(){
+  currentMonth = $('month-picker').value;
+  draftGrid = {}; additionalStores = [];
+  // Reset range to the new full month. RM can widen/narrow it afterwards.
+  currentRange = fullMonthRange(currentMonth);
+  syncRangeInputs();
+  renderRangeStatus();
+  loadDashboard();
+  if ($('panel-summary').classList.contains('active')) loadSummary();
+}
+
+/**
+ * User changed From or To date. Validate, store, reload.
+ */
+function onRangeChange(){
+  const from = $('range-from').value;
+  const to   = $('range-to').value;
+  if (!from || !to){
+    showToast('Please select both From and To dates.', 'error');
+    return;
+  }
+  if (from > to){
+    showToast('From date cannot be after To date.', 'error');
+    // Auto-swap so user isn't stuck
+    currentRange = { from: to, to: from };
+  } else {
+    currentRange = { from, to };
+  }
+  syncRangeInputs();
+  renderRangeStatus();
+  loadDashboard();
+  if ($('panel-summary').classList.contains('active')) loadSummary();
+}
+
+/**
+ * Reset the Report Range back to the full currently-selected Plan Month.
+ */
+function resetRangeToMonth(){
+  if (!currentMonth) return;
+  currentRange = fullMonthRange(currentMonth);
+  syncRangeInputs();
+  renderRangeStatus();
+  loadDashboard();
+  if ($('panel-summary').classList.contains('active')) loadSummary();
+  showToast('Range reset to ' + currentMonth, 'success');
+}
+
+function syncRangeInputs(){
+  if (!currentRange) return;
+  $('range-from').value = currentRange.from;
+  $('range-to').value   = currentRange.to;
+}
+
+function renderRangeStatus(){
+  const bar = $('range-bar');
+  const status = $('range-status');
+  if (!currentRange || !currentMonth){
+    if (bar) bar.classList.remove('multi-month');
+    if (status) status.textContent = '';
+    return;
+  }
+  const spans = rangeSpansMonths(currentRange);
+  const days = rangeDayCount(currentRange);
+  const isFullMonth = rangeMatchesMonth(currentRange, currentMonth);
+
+  if (bar) bar.classList.toggle('multi-month', spans);
+
+  let msg;
+  if (isFullMonth){
+    msg = 'Full month · ' + days + ' days';
+  } else if (spans){
+    msg = '⚠ Spans ' + countMonthsInRange(currentRange) + ' months · ' + days + ' days';
+  } else {
+    msg = formatDatePretty(currentRange.from) + ' – ' + formatDatePretty(currentRange.to) +
+          ' · ' + days + ' days';
+  }
+  if (status) status.textContent = msg;
+}
+
+function countMonthsInRange(r){
+  if (!r) return 0;
+  const a = new Date(r.from + 'T00:00:00');
+  const b = new Date(r.to + 'T00:00:00');
+  return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1;
+}
+
+function startAutoRefresh(){
+  stopAutoRefresh();
+  refreshTimer = setInterval(() => {
+    if (!isSubmitting && !hasUnsavedDraft()) loadDashboard(true);
+  }, 30000);
+}
+function stopAutoRefresh(){ if (refreshTimer){ clearInterval(refreshTimer); refreshTimer = null; } }
+function hasUnsavedDraft(){
+  if (!isRM()) return false;
+  if (currentData && currentData.plan && currentData.plan.locked) return false;
+  return Object.keys(draftGrid).some(s => Object.keys(draftGrid[s] || {}).length > 0);
+}
+
+/* ============ BASE STORE & TRAVEL MODE ============ */
+function renderBaseStoreBar(data){
+  if (!isRM()) return;
+  const sel = $('base-store-select');
+  sel.innerHTML = '<option value="">-- Select Base Store --</option>' +
+    data.stores.map(s => '<option value="' + escapeHtml(s.storeName) + '"' +
+      (data.baseStore === s.storeName ? ' selected' : '') + '>' +
+      escapeHtml(s.storeName) + '</option>').join('');
+  const bar = $('settings-bar');
+  if (data.baseStore){
+    bar.classList.add('configured');
+    $('base-status').textContent = '✓ Travel starts from this store each day';
+  } else {
+    bar.classList.remove('configured');
+    $('base-status').textContent = '⚠ Set your base store to enable travel calculation';
+  }
+
+  // Highlight the active travel mode button
+  const rates = data.availableRates || (data.travel && data.travel.availableRates) || { Car: 12, Bike: 7 };
+  const currentMode = (data.travel && data.travel.defaultMode) || data.travelMode || 'Car';
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    const m = b.dataset.mode;
+    b.classList.toggle('active', m === currentMode);
+    b.title = '₹' + (rates[m] || '?') + ' / km';
+  });
+}
+function saveBaseStore(){
+  const store = $('base-store-select').value;
+  if (!store){ showToast('Select a base store.', 'error'); return; }
+  const btn = $('save-base-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Saving…';
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false; btn.textContent = 'Save';
+      if (res.success){ showToast(res.message, 'success'); loadDashboard(); }
+      else showToast(res.message, 'error');
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false; btn.textContent = 'Save';
+      showToast('Error: ' + err.message, 'error');
+    })
+    .setBaseStore(caller(), actor.name, store);
+}
+function setTravelMode(mode){
+  if (!isRM()){ showToast('Only the RM can change travel mode.', 'error'); return; }
+  // Optimistic UI: flip the highlight immediately
+  document.querySelectorAll('.mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success){
+        showToast(res.message, 'success');
+        loadDashboard();
+      } else {
+        showToast(res.message, 'error');
+        // Revert on failure: reload data
+        loadDashboard();
+      }
+    })
+    .withFailureHandler(err => {
+      showToast('Error: ' + err.message, 'error');
+      loadDashboard();
+    })
+    .setTravelMode(caller(), actor.name, mode);
+}
+
+/**
+ * Called when an RM picks Car/Bike in the per-day dropdown on Travel Log.
+ * Saves to the Daily Travel Mode sheet and reloads so cost updates.
+ */
+function onDailyModeChange(dateKey, mode){
+  if (!isRM()){ showToast('Only the RM can change travel mode.', 'error'); return; }
+  const sel = document.getElementById('mode-' + dateKey.replace(/-/g,''));
+  if (sel) sel.disabled = true;
+  google.script.run
+    .withSuccessHandler(res => {
+      if (sel) sel.disabled = false;
+      if (res.success){
+        showToast(mode + ' set for ' + dateKey, 'success');
+        loadDashboard();
+      } else {
+        showToast(res.message, 'error');
+        loadDashboard();
+      }
+    })
+    .withFailureHandler(err => {
+      if (sel) sel.disabled = false;
+      showToast('Error: ' + err.message, 'error');
+      loadDashboard();
+    })
+    .setDailyMode(caller(), actor.name, dateKey, mode);
+}
+
+/* ============ LOAD DASHBOARD ============ */
+function loadDashboard(silent){
+  if (!actor || !currentRM || !currentMonth) return;
+  if (!silent) $('refresh-status').textContent = 'Refreshing…';
+
+  google.script.run
+    .withSuccessHandler(data => {
+      if (data && data.error){ showToast(data.error, 'error'); return; }
+      currentData = data;
+      draftGrid = {};
+      Object.keys(data.plan.grid || {}).forEach(s => {
+        draftGrid[s] = Object.assign({}, data.plan.grid[s]);
+      });
+      additionalStores = (data.plan.additional || []).slice();
+      while (additionalStores.length < data.additionalRowCount) additionalStores.push('');
+
+      renderBaseStoreBar(data);
+      renderVisitPlan(data);
+      renderComparison(data);
+      renderTravel(data);
+      renderAudit(data);
+      $('refresh-status').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    })
+    .withFailureHandler(err => {
+      $('refresh-status').textContent = 'Error';
+      showToast('Error loading data: ' + err.message, 'error');
+    })
+    .getDashboardData(caller(), currentRM, currentMonth, currentRange);
+}
+
+/* ============ VISIT PLAN RENDER ============ */
+function renderVisitPlan(data){
+  const c = $('visit-plan-container');
+  const kpi = data.planKPI;
+  // Non-RM actors never edit, so effectively locked
+  // Lock the plan UI when: the plan is already Locked, OR the caller isn't an RM,
+  // OR an RM is viewing someone else (a CM's data, for instance).
+  const viewingSelf = isRM() && currentRM &&
+                      String(currentRM).trim().toLowerCase() ===
+                      String(actor.name).trim().toLowerCase();
+  const effectivelyLocked = data.plan.locked || !isRM() || !viewingSelf;
+  const cmsLabel = data.uniqueCMs.length ? data.uniqueCMs.join(', ') : '—';
+
+  let html = '';
+  html += '<div class="vp-header">';
+  html += '<span>📋</span>';
+  html += '<span class="rm-name">' + escapeHtml(data.rmName.toUpperCase()) + '</span>';
+  html += '<span class="divider">|</span><span>VISIT PLAN</span>';
+  html += '<span class="divider">|</span><span class="pill">' + data.stores.length + ' Stores</span>';
+  html += '<span class="divider">|</span><span>CMs: ' + escapeHtml(cmsLabel) + '</span>';
+  if (data.baseStore){
+    html += '<span class="divider">|</span><span>🏠 Base: ' + escapeHtml(data.baseStore) + '</span>';
+  }
+  html += '</div>';
+
+  html += '<div class="vp-month-row">';
+  html += '<label>Month:</label><span class="month-pick">' + monthLabel(data.month) + '</span>';
+  html += '<span class="vp-subtitle">Visit Plan for ' + monthLabel(data.month) +
+          ' &nbsp;|&nbsp; ' + data.stores.length + ' stores + ' + data.additionalRowCount +
+          ' additional &nbsp;|&nbsp; ' + data.dayMeta.length + ' days</span>';
+  html += '</div>';
+
+  html += '<div class="vp-kpi-row">';
+  html += kpiCard('total',   'Total Visits',    kpi.totalVisits);
+  html += kpiCard('covered', 'Stores Covered',  kpi.storesCovered + '/' + kpi.totalStores);
+  html += kpiCard('cm',      'CM Accompany',    kpi.cmAccompany);
+  html += kpiCard('notvis',  'Not Visited',     kpi.notVisited);
+  html += kpiCard('reimb',   'Travel Reimb ₹',  kpi.travelReimb.toLocaleString('en-IN'));
+  html += '</div>';
+
+  html += '<div class="vp-legend">';
+  Object.keys(data.visitTypes).forEach(code => {
+    const t = data.visitTypes[code];
+    html += '<span class="legend-item">' +
+            '<span class="legend-badge" style="background:' + t.color + '">' + code + '</span>' +
+            '<span>' + t.label + '</span></span>';
+  });
+  html += '</div>';
+
+  if (!data.stores.length){
+    html += '<div class="empty">No stores mapped to this RM.</div>';
+    c.innerHTML = html; return;
+  }
+
+  html += '<div class="vp-grid-wrap"><table class="vp-grid"><thead><tr>';
+  html += '<th class="sticky-col" style="min-width:170px;text-align:left;padding-left:10px">Store Name</th>';
+  html += '<th class="sticky-col col2" style="min-width:120px;text-align:left;padding-left:10px">CM</th>';
+  data.dayMeta.forEach(dm => {
+    html += '<th class="day-header' + (dm.weekend ? ' weekend' : '') + '">' +
+            dm.day + '<small>' + dm.weekday + '</small></th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  data.stores.forEach(store => {
+    html += storeRowHtml(store.storeName, store.cmName, data, effectivelyLocked, false);
+  });
+  for (let i = 0; i < data.additionalRowCount; i++){
+    const chosen = additionalStores[i] || '';
+    html += additionalRowHtml(i, chosen, data, effectivelyLocked);
+  }
+  html += '</tbody></table></div>';
+
+  html += '<div class="vp-submit-bar">';
+  if (!isRM()){
+    html += '<span class="locked-indicator">👁️ View-only — only the RM can edit.</span>';
+  } else if (data.plan.locked){
+    html += '<span class="locked-indicator">🔒 Plan locked on ' +
+            (data.plan.submittedOn || '—') + '</span>';
+    html += '<button class="btn-danger" onclick="editPlan()">✏️ Edit Plan</button>';
+  } else {
+    html += '<span style="color:var(--muted);font-size:13px">' +
+            '💡 L/H/WO = full day (locks other stores). WOH = half day.</span>';
+    html += '<button class="btn-primary" id="submit-plan-btn" onclick="submitPlan()">Submit &amp; Lock Plan</button>';
+  }
+  html += '</div>';
+
+  c.innerHTML = html;
+}
+
+function kpiCard(cls, label, value){
+  return '<div class="vp-kpi ' + cls + '"><span class="label">' + label +
+         '</span><div class="value">' + value + '</div></div>';
+}
+
+function storeRowHtml(storeName, cmName, data, locked, isAdditional){
+  let html = '<tr' + (isAdditional ? ' class="additional-row"' : '') + '>';
+  const baseFlag = (storeName === data.baseStore) ? ' 🏠' : '';
+  html += '<td class="sticky-col store-cell">' + escapeHtml(storeName) + baseFlag + '</td>';
+  html += '<td class="sticky-col col2 cm-cell">' + escapeHtml(cmName || '—') + '</td>';
+  data.dayMeta.forEach(dm => {
+    html += dayCellHtml(storeName, dm, data, locked, isAdditional);
+  });
+  html += '</tr>';
+  return html;
+}
+
+function additionalRowHtml(idx, chosenStore, data, locked){
+  let html = '<tr class="additional-row">';
+  html += '<td class="sticky-col store-cell" style="padding:4px 10px">';
+  if (locked){
+    html += escapeHtml(chosenStore || '(empty)');
+  } else {
+    html += '<select class="additional-store-select" ' +
+      'onchange="onAdditionalStoreChange(' + idx + ', this.value)">' +
+      '<option value="">— Additional Visit ' + (idx + 1) + ' —</option>';
+    data.allStores.forEach(s => {
+      const inMapped = data.stores.some(m => m.storeName === s);
+      const inOther = additionalStores.some((x, i) => i !== idx && x === s);
+      if (inMapped || inOther) return;
+      html += '<option value="' + escapeHtml(s) + '"' +
+              (s === chosenStore ? ' selected' : '') + '>' + escapeHtml(s) + '</option>';
+    });
+    html += '</select>';
+  }
+  html += '</td>';
+  html += '<td class="sticky-col col2 cm-cell">Additional</td>';
+  data.dayMeta.forEach(dm => {
+    html += dayCellHtml(chosenStore, dm, data, locked, true);
+  });
+  html += '</tr>';
+  return html;
+}
+
+function dayCellHtml(storeName, dm, data, locked, isAdditional){
+  const grid = (storeName && draftGrid[storeName]) || {};
+  const currentVal = grid[dm.day] || '';
+  const typeCls = currentVal ? ' type-' + currentVal : '';
+  const weekendCls = dm.weekend ? ' weekend' : '';
+  const offOnThisDay = findOffDayType(dm.day);
+  const otherStoreHasFullOff = offOnThisDay &&
+    offOnThisDay.store !== storeName &&
+    (offOnThisDay.type === 'L' || offOnThisDay.type === 'H' || offOnThisDay.type === 'WO');
+
+  if (locked){
+    const cls = 'day-cell' + (currentVal ? ' has-value' : '') + typeCls + weekendCls;
+    return '<td class="' + cls + '">' +
+           '<span class="locked-badge' + (currentVal ? '' : ' empty') + '">' + (currentVal || '') + '</span>' +
+           '</td>';
+  }
+  if (!storeName){
+    return '<td class="day-cell' + weekendCls + ' cell-disabled"></td>';
+  }
+  const disabled = otherStoreHasFullOff;
+  const cls = 'day-cell' + (currentVal ? ' has-value' : '') + typeCls + weekendCls +
+              (disabled ? ' cell-disabled' : '');
+  let opt = '<option value=""' + (!currentVal ? ' selected' : '') + '>–</option>';
+  Object.keys(data.visitTypes).forEach(code => {
+    opt += '<option value="' + code + '"' +
+           (currentVal === code ? ' selected' : '') + '>' + code + '</option>';
+  });
+  return '<td class="' + cls + '" data-store="' + escapeHtml(storeName) +
+         '" data-day="' + dm.day + '"' + (isAdditional ? ' data-additional="1"' : '') + '>' +
+         '<select class="day-select" onchange="onCellChange(this)"' +
+         (disabled ? ' disabled' : '') + '>' + opt + '</select></td>';
+}
+
+function findOffDayType(day){
+  const offSet = { L: 1, H: 1, WO: 1 };
+  let found = null;
+  Object.keys(draftGrid).some(store => {
+    const vt = draftGrid[store][day];
+    if (vt && offSet[vt]){ found = { store, type: vt }; return true; }
+  });
+  return found;
+}
+
+function onCellChange(sel){
+  const td = sel.closest('td');
+  const store = td.dataset.store;
+  const day = Number(td.dataset.day);
+  const val = sel.value;
+  if (val === 'L' || val === 'H' || val === 'WO'){
+    Object.keys(draftGrid).forEach(s => {
+      if (s !== store && draftGrid[s][day]) delete draftGrid[s][day];
+    });
+  }
+  if (!draftGrid[store]) draftGrid[store] = {};
+  if (val) draftGrid[store][day] = val;
+  else delete draftGrid[store][day];
+  renderVisitPlan(currentData);
+}
+
+function onAdditionalStoreChange(idx, storeName){
+  const old = additionalStores[idx];
+  if (old && draftGrid[old]){
+    if (storeName) draftGrid[storeName] = draftGrid[old];
+    delete draftGrid[old];
+  }
+  additionalStores[idx] = storeName;
+  renderVisitPlan(currentData);
+}
+
+/* ============ SUBMIT / EDIT ============ */
+function submitPlan(){
+  const cells = [];
+  const mappedStoreNames = new Set(currentData.stores.map(s => s.storeName));
+  const additionalSet = new Set(additionalStores.filter(Boolean));
+  Object.keys(draftGrid).forEach(store => {
+    const isAdd = additionalSet.has(store);
+    const isMapped = mappedStoreNames.has(store);
+    if (!isMapped && !isAdd) return;
+    Object.keys(draftGrid[store]).forEach(d => {
+      cells.push({
+        storeName: store, day: Number(d),
+        visitType: draftGrid[store][d], isAdditional: isAdd && !isMapped
+      });
+    });
+  });
+  if (!cells.length){ showToast('Please fill in at least one cell.', 'error'); return; }
+  if (!confirm('Submit & lock plan with ' + cells.length + ' entries?')) return;
+
+  const btn = $('submit-plan-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Submitting…';
+  isSubmitting = true;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      isSubmitting = false;
+      if (res.success){ showToast(res.message, 'success'); loadDashboard(); }
+      else { btn.disabled = false; btn.textContent = 'Submit & Lock Plan'; showToast(res.message, 'error'); }
+    })
+    .withFailureHandler(err => {
+      isSubmitting = false;
+      btn.disabled = false; btn.textContent = 'Submit & Lock Plan';
+      showToast('Error: ' + err.message, 'error');
+    })
+    .submitVisitPlan(caller(), currentRM, currentMonth, cells);
+}
+
+function editPlan(){
+  if (!confirm('Unlock the current plan for editing?\nThis will delete the saved plan and let you submit a new one.')) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success){ showToast('Plan unlocked.', 'success'); loadDashboard(); }
+      else showToast(res.message || 'Could not unlock plan.', 'error');
+    })
+    .withFailureHandler(err => showToast('Error: ' + err.message, 'error'))
+    .deleteVisitPlan(caller(), currentRM, currentMonth);
+}
+
+/* ============ PLANNED VS ACTUAL RENDER ============ */
+function renderComparison(data){
+  const topBox = $('top-perf-box');
+  if (data.topPerformer){
+    topBox.innerHTML = '<div class="top-perf-banner">🏆 <b>Top Performer:</b> ' +
+      escapeHtml(data.topPerformer.rmName) + ' — ' + data.topPerformer.completion +
+      '% (' + data.topPerformer.totalActual + '/' + data.topPerformer.totalPlanned + ')</div>';
+  } else topBox.innerHTML = '';
+
+  const rows = data.comparison.rows;
+  const content = $('actual-content');
+  if (!rows || rows.length === 0){
+    content.innerHTML = '<div class="empty">No data available for this month.</div>';
+    return;
+  }
+  let html = '<div class="table-wrap"><table class="data">';
+  html += '<thead><tr><th>Store Name</th><th>Planned</th><th>Actual</th><th>Completion %</th><th>Status</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    const cls = r.missed ? 'missed' : '';
+    const badgeClass = r.completion >= 100 ? 'good' : (r.completion >= 50 ? 'mid' : 'bad');
+    const statusTxt = r.missed ? '❌ Missed' : (r.planned === 0 ? '—' : '✅ On Track');
+    html += '<tr class="' + cls + '"><td>' + escapeHtml(r.storeName) + '</td><td>' +
+            r.planned + '</td><td>' + r.actual +
+            '</td><td><span class="badge ' + badgeClass + '">' + r.completion +
+            '%</span></td><td>' + statusTxt + '</td></tr>';
+  });
+  const k = data.comparison.kpi;
+  html += '<tr class="total-row"><td>TOTAL</td><td>' + k.totalPlanned +
+          '</td><td>' + k.totalActual + '</td><td>' + k.completion + '%</td><td></td></tr>';
+  html += '</tbody></table></div>';
+  content.innerHTML = html;
+}
+
+/* ============ TRAVEL LOG RENDER ============ */
+function renderTravel(data){
+  const t = data.travel;
+  const content = $('travel-content');
+  let html = '';
+  html += '<div class="travel-summary">';
+  html += travelCard('total', 'Total Distance', t.totalKM + ' KM',
+                    t.distanceSource === 'matrix' ? 'From Distance Calculator' :
+                    t.distanceSource === 'haversine-fallback' ? 'Some legs via Haversine' :
+                    'Straight-line × ' + (t.roadFactor || 1) + '×');
+  html += travelCard('days',  'Days Travelled', t.daysTravelled, 'Days with swipes');
+  html += travelCard('avg',   'Avg / Day',      t.avgPerDay + ' KM', 'Per travel day');
+  // Mode mix description for cost card: how many days Car vs Bike
+  const modeCount = { Car: 0, Bike: 0 };
+  (t.daily || []).forEach(d => { if (modeCount[d.mode] != null) modeCount[d.mode]++; });
+  let mixLabel = 'Default: ' + (t.defaultMode === 'Bike' ? '🏍️' : '🚗') +
+                 ' @ ' + formatINR(t.defaultRate) + '/km';
+  if (modeCount.Car > 0 && modeCount.Bike > 0){
+    mixLabel = '🚗 ' + modeCount.Car + 'd · 🏍️ ' + modeCount.Bike + 'd';
+  } else if (modeCount.Bike > 0 && modeCount.Car === 0){
+    mixLabel = '🏍️ Bike × ' + modeCount.Bike + ' days';
+  } else if (modeCount.Car > 0 && modeCount.Bike === 0){
+    mixLabel = '🚗 Car × ' + modeCount.Car + ' days';
+  }
+  html += travelCard('cost',  'Cost Estimate',  formatINR(t.costEstimate), mixLabel);
+  html += '</div>';
+
+  if (t.distanceSource === 'matrix'){
+    html += '<div style="font-size:12px;color:var(--success);margin-bottom:10px">' +
+            '✓ Distances read from your <b>Distance Calculator</b> sheet.</div>';
+  } else if (t.distanceSource === 'haversine-fallback'){
+    html += '<div style="font-size:12px;color:var(--warning);margin-bottom:10px">' +
+            '⚠ Some distances fell back to Haversine (× ' + t.roadFactor +
+            '). Check the Distance Calculator sheet for missing pairs.</div>';
+  } else if (t.roadFactor && t.roadFactor !== 1){
+    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' +
+            '📍 Distances are straight-line (Haversine) × <b>' + t.roadFactor +
+            '×</b> road factor. For exact distances, populate the Distance Calculator sheet.</div>';
+  }
+
+  if (!t.baseStore){
+    html += '<div class="warning-box">⚠ <b>Base Store not set.</b> Travel calculated store-to-store only.</div>';
+  }
+  if (t.missingCoords && t.missingCoords.length){
+    html += '<div class="warning-box">⚠ <b>Missing coordinates</b> for: ' +
+            t.missingCoords.map(escapeHtml).join(', ') + '. Add in <b>Store Master</b>.</div>';
+  }
+
+  if (t.daily && t.daily.length){
+    html += '<h3 style="margin:14px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Daily Totals</h3>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">' +
+            'Pick Car or Bike for each day — cost recalculates automatically. Unmarked days use the default mode.</div>';
+    html += '<div class="table-wrap"><table class="data">';
+    html += '<thead><tr><th>Date</th><th>Distance (KM)</th><th>Mode</th><th>Rate ₹/km</th><th>Cost ₹</th><th>Status</th></tr></thead><tbody>';
+    const canEditMode = isRM() && actor && currentRM &&
+                        String(currentRM).trim().toLowerCase() ===
+                        String(actor.name).trim().toLowerCase();
+    let totalDayCost = 0;
+    t.daily.forEach(d => {
+      totalDayCost += d.cost || 0;
+      const dropdownId = 'mode-' + d.date.replace(/-/g,'');
+      const modeCell = canEditMode
+        ? '<select id="' + dropdownId + '" class="day-mode-select" ' +
+          'onchange="onDailyModeChange(\'' + d.date + '\', this.value)">' +
+          '<option value="Car"'  + (d.mode === 'Car'  ? ' selected' : '') + '>🚗 Car</option>' +
+          '<option value="Bike"' + (d.mode === 'Bike' ? ' selected' : '') + '>🏍️ Bike</option>' +
+          '</select>' +
+          (d.hasOverride ? '' : ' <span style="font-size:10px;color:var(--muted)" title="Using default mode">·</span>')
+        : (d.mode === 'Bike' ? '🏍️ Bike' : '🚗 Car');
+      html += '<tr class="' + (d.abnormal ? 'abnormal' : '') + '">' +
+              '<td>' + d.date + '</td>' +
+              '<td>' + d.km + '</td>' +
+              '<td>' + modeCell + '</td>' +
+              '<td>' + formatINR(d.rate) + '</td>' +
+              '<td>' + formatINR(d.cost) + '</td>' +
+              '<td>' + (d.abnormal
+                ? '<span class="badge warn">⚠ Abnormal (>' + t.abnormalThreshold + ' km)</span>'
+                : '<span class="badge good">Normal</span>') + '</td></tr>';
+    });
+    html += '<tr class="total-row"><td>TOTAL</td><td>' + t.totalKM +
+            '</td><td></td><td></td><td>' + formatINR(totalDayCost) + '</td><td></td></tr>';
+    html += '</tbody></table></div>';
+  }
+
+  if (!t.log || t.log.length === 0){
+    html += '<div class="empty">No store-to-store movement recorded this month.</div>';
+    content.innerHTML = html; return;
+  }
+  html += '<h3 style="margin:18px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Detailed Movement</h3>';
+  html += '<div class="table-wrap"><table class="data">';
+  html += '<thead><tr><th>Date</th><th>From Store</th><th>To Store</th><th>Distance (KM)</th></tr></thead><tbody>';
+  t.log.forEach(leg => {
+    const cls = leg.isBase ? 'row-base' : '';
+    // BASE badge on From for the opening (base → first store) leg
+    // RETURN badge on To for the closing (last store → base) leg
+    const fromBadge = (leg.isBase && !leg.isReturn) ? ' <span class="badge base">BASE</span>' : '';
+    const toBadge   = leg.isReturn ? ' <span class="badge base">RETURN</span>' : '';
+    html += '<tr class="' + cls + '"><td>' + leg.date + '</td><td>' +
+            escapeHtml(leg.fromStore) + fromBadge +
+            '</td><td>' + escapeHtml(leg.toStore) + toBadge + '</td><td>' + leg.distance +
+            (leg.missing ? ' <span style="color:var(--warning)">⚠</span>' : '') + '</td></tr>';
+  });
+  html += '<tr class="total-row"><td colspan="3">TOTAL</td><td>' + t.totalKM + '</td></tr>';
+  html += '</tbody></table></div>';
+  content.innerHTML = html;
+}
+function travelCard(cls, label, value, sub){
+  return '<div class="travel-card ' + cls + '">' +
+         '<div class="label">' + label + '</div>' +
+         '<div class="value">' + value + '</div>' +
+         (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>';
+}
+
+/* ============ CSV EXPORTS ============ */
+function exportTravelCSV(){
+  if (!currentData) return;
+  const t = currentData.travel;
+  const header = ['Date','RM Name','Travel Mode','From Store','To Store','Distance (KM)','Leg Type','Distance Source','Daily Total KM','Rate/KM','Leg Cost ₹','Monthly Total KM','Monthly Cost ₹'];
+  const rows = [header];
+  // Build per-day lookup: { date: { km, mode, rate } }
+  const dayInfo = {};
+  (t.daily || []).forEach(d => {
+    dayInfo[d.date] = { km: d.km, mode: d.mode, rate: d.rate };
+  });
+  (t.log || []).forEach(leg => {
+    const legType = leg.isReturn ? 'Return to Base'
+                  : leg.isBase   ? 'Base to First'
+                                 : 'Store to Store';
+    const info = dayInfo[leg.date] || { km: '', mode: t.defaultMode || 'Car', rate: t.defaultRate || 0 };
+    const legCost = Math.round((leg.distance || 0) * info.rate * 100) / 100;
+    rows.push([leg.date, currentData.rmName, info.mode,
+               leg.fromStore, leg.toStore, leg.distance, legType,
+               leg.source || '',
+               info.km, info.rate, legCost, '', '']);
+  });
+  rows.push(['','','','','','','','', '', '', 'TOTAL', t.totalKM, t.costEstimate]);
+  downloadCSV('TravelLog_' + currentData.rmName.replace(/\s+/g,'_') + '_' + rangeLabel() + '.csv', rows);
+  showToast('Travel log exported', 'success');
+}
+
+function exportAuditCSV(){
+  if (!currentData) return;
+  const header = ['Date','RM Name','Issue Type','Store Name','Severity','Status','Reviewer','Reviewed On','Notes','Remark'];
+  const rows = [header];
+  currentData.audit.issues.forEach(i => {
+    rows.push([i.date, i.rmName, i.issueType, i.storeName, i.severity,
+               i.status || 'Open', i.reviewer || '', i.reviewedOn || '', i.notes || '', i.remark]);
+  });
+  downloadCSV('Audit_' + currentData.rmName.replace(/\s+/g,'_') + '_' + rangeLabel() + '.csv', rows);
+  showToast('Audit log exported', 'success');
+}
+
+function exportSummaryCSV(){
+  if (!currentSummary) return;
+  const header = ['Rank','RM Name','Cluster','Planned','Actual','Completion %','Total KM','Open Issues','High-Severity Issues'];
+  const rows = [header];
+  currentSummary.rows.forEach(r => {
+    rows.push([r.rank, r.rmName, r.cluster, r.planned, r.actual,
+               r.completion + '%', r.totalKM, r.openIssues, r.highSeverity]);
+  });
+  const scope = selectedCluster || 'All';
+  downloadCSV('Summary_' + scope + '_' + rangeLabel() + '.csv', rows);
+  showToast('Summary exported', 'success');
+}
+
+/* ============ AUDIT RENDER ============ */
+function renderAudit(data){
+  const a = data.audit;
+  const content = $('audit-content');
+  const countBadge = $('audit-count');
+  if (a.summary.open > 0){
+    countBadge.style.display = 'inline-block';
+    countBadge.textContent = a.summary.open;
+  } else countBadge.style.display = 'none';
+
+  let html = '';
+  html += '<div class="audit-summary">';
+  html += auditCard('total',  'Total Issues',  a.summary.total);
+  html += auditCard('open',   'Open',          a.summary.open);
+  html += auditCard('approved','Approved',     a.summary.approved);
+  html += auditCard('rejected','Rejected',     a.summary.rejected);
+  html += auditCard('unmapped','Unmapped',     a.summary.unmapped);
+  html += auditCard('offViolation','Off-day Violations', a.summary.offViolation);
+  html += '</div>';
+
+  if (!a.issues.length){
+    html += '<div class="empty">✅ No audit issues detected for this month.</div>';
+    content.innerHTML = html; return;
+  }
+  html += '<div class="table-wrap"><table class="data">';
+  const adminCol = isAdmin() ? '<th>Actions</th>' : '';
+  html += '<thead><tr><th>Date</th><th>Issue Type</th><th>Store</th><th>Severity</th><th>Status</th><th>Reviewer</th><th>Remark</th>' + adminCol + '</tr></thead><tbody>';
+  a.issues.forEach(i => {
+    const statusCls = 'status-' + (i.status || 'Open');
+    html += '<tr class="sev-' + i.severity + ' ' + statusCls + '">';
+    html += '<td>' + i.date + '</td>';
+    html += '<td><b>' + escapeHtml(i.issueType) + '</b></td>';
+    html += '<td>' + escapeHtml(i.storeName) + '</td>';
+    html += '<td><span class="badge ' + i.severity + '">' + i.severity.toUpperCase() + '</span></td>';
+    html += '<td><span class="badge ' + (i.status || 'Open') + '">' + (i.status || 'Open') + '</span></td>';
+    html += '<td style="font-size:12px">' + escapeHtml(i.reviewer || '—') +
+            (i.reviewedOn ? '<br><small style="color:var(--muted)">' + i.reviewedOn + '</small>' : '') + '</td>';
+    html += '<td>' + escapeHtml(i.remark) +
+            (i.notes ? '<br><small style="color:var(--muted)"><b>Note:</b> ' + escapeHtml(i.notes) + '</small>' : '') +
+            '</td>';
+    if (isAdmin()){
+      const key = escapeHtml(i.issueKey);
+      html += '<td><div class="action-row">';
+      if (i.status !== 'Approved')
+        html += '<button class="btn-success btn-sm" onclick="reviewIssue(\'' + key + '\',\'Approved\')">✓ Approve</button>';
+      if (i.status !== 'Rejected')
+        html += '<button class="btn-reject btn-sm" onclick="reviewIssue(\'' + key + '\',\'Rejected\')">✗ Reject</button>';
+      if (i.status !== 'Open')
+        html += '<button class="btn-secondary btn-sm" onclick="reviewIssue(\'' + key + '\',\'Open\')">↺ Reopen</button>';
+      html += '</div></td>';
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  content.innerHTML = html;
+}
+function auditCard(cls, label, value){
+  return '<div class="audit-card ' + cls + '">' +
+         '<div class="label">' + label + '</div>' +
+         '<div class="value">' + value + '</div></div>';
+}
+
+function reviewIssue(issueKey, decision){
+  let notes = '';
+  if (decision === 'Rejected'){
+    notes = prompt('Reason for rejection (optional):') || '';
+  } else if (decision === 'Approved'){
+    notes = prompt('Notes (optional):') || '';
+  }
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success){ showToast(res.message, 'success'); loadDashboard(); }
+      else showToast(res.message, 'error');
+    })
+    .withFailureHandler(err => showToast('Error: ' + err.message, 'error'))
+    .reviewAuditIssue(caller(), issueKey, decision, notes);
+}
+
+/* ============ SCOPE SUMMARY ============ */
+function loadSummary(){
+  if (isRM()) return; // no summary tab for RMs
+  $('summary-content').innerHTML = '<div class="empty"><span class="spinner"></span> Loading summary…</div>';
+  $('summary-heading').textContent = isAdmin()
+    ? (selectedCluster ? 'Cluster Summary — ' + selectedCluster : 'Organization Summary — All Clusters')
+    : 'Cluster Summary — ' + (actor.cluster || '—');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res.success){ $('summary-content').innerHTML = '<div class="empty">' + escapeHtml(res.message || 'Failed') + '</div>'; return; }
+      currentSummary = res;
+      renderSummary(res);
+    })
+    .withFailureHandler(err => {
+      $('summary-content').innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
+    })
+    .getScopeSummary(caller(), currentRange || currentMonth, selectedCluster || '');
+}
+
+function renderSummary(s){
+  const content = $('summary-content');
+  let html = '';
+
+  // KPI cards
+  html += '<div class="summary-kpi">';
+  html += '<div class="summary-card rm"><div class="label">RMs in Scope</div><div class="value">' + s.kpi.rmCount + '</div></div>';
+  html += '<div class="summary-card visits"><div class="label">Total Planned</div><div class="value">' + s.kpi.totalPlanned + '</div></div>';
+  html += '<div class="summary-card visits"><div class="label">Total Actual</div><div class="value">' + s.kpi.totalActual + '</div></div>';
+  html += '<div class="summary-card completion"><div class="label">Overall Completion</div><div class="value">' + s.kpi.overallCompletion + '%</div></div>';
+  html += '<div class="summary-card km"><div class="label">Total KM</div><div class="value">' + s.kpi.totalKM + '</div></div>';
+  html += '<div class="summary-card alerts"><div class="label">Open Issues</div><div class="value">' + s.kpi.openIssues + '</div></div>';
+  html += '</div>';
+
+  if (s.topPerformer){
+    html += '<div class="top-perf-banner">🏆 <b>Top Performer:</b> ' +
+      escapeHtml(s.topPerformer.rmName) + ' — ' + s.topPerformer.completion +
+      '% (' + s.topPerformer.totalActual + '/' + s.topPerformer.totalPlanned + ')</div>';
+  }
+
+  if (!s.rows.length){
+    html += '<div class="empty">No RMs in this scope.</div>';
+    content.innerHTML = html; return;
+  }
+
+  html += '<div class="table-wrap"><table class="data">';
+  html += '<thead><tr><th>Rank</th><th>RM Name</th><th>Cluster</th><th>Planned</th><th>Actual</th><th>Completion %</th><th>Total KM</th><th>Open Issues</th><th>High-Severity</th><th></th></tr></thead><tbody>';
+  s.rows.forEach(r => {
+    const rankCls = r.rank <= 3 ? 'rank-' + r.rank : '';
+    const badge = r.completion >= 100 ? 'good' : (r.completion >= 50 ? 'mid' : 'bad');
+    html += '<tr>';
+    html += '<td class="' + rankCls + '">#' + r.rank + '</td>';
+    html += '<td>' + escapeHtml(r.rmName) + '</td>';
+    html += '<td>' + escapeHtml(r.cluster || '—') + '</td>';
+    html += '<td>' + r.planned + '</td>';
+    html += '<td>' + r.actual + '</td>';
+    html += '<td><span class="badge ' + badge + '">' + r.completion + '%</span></td>';
+    html += '<td>' + r.totalKM + '</td>';
+    html += '<td>' + (r.openIssues > 0 ? '<span class="badge warn">' + r.openIssues + '</span>' : '0') + '</td>';
+    html += '<td>' + (r.highSeverity > 0 ? '<span class="badge bad">' + r.highSeverity + '</span>' : '0') + '</td>';
+    html += '<td><button class="btn-secondary btn-sm" onclick="jumpToRM(\'' + escapeHtml(r.rmName) + '\')">View →</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  content.innerHTML = html;
+}
+
+function jumpToRM(rmName){
+  currentRM = rmName;
+  // Ensure cluster dropdown reflects if needed
+  const rm = accessibleRMs.find(r => r.name === rmName);
+  if (rm && rm.cluster && isAdmin()){
+    selectedCluster = rm.cluster;
+    $('cluster-select').value = selectedCluster;
+  }
+  rebuildRMSelect();
+  $('rm-select').value = rmName;
+  switchTab('plan');
+  loadDashboard();
+}
+
+/* ============ INIT ============ */
+// On page load, fill the login Name dropdown and set up Enter-key submit
+document.addEventListener('DOMContentLoaded', () => {
+  populateLoginNames();
+  const designation = $('login-designation');
+  if (designation) designation.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+});
+</script>
+
+</body>
+</html>
