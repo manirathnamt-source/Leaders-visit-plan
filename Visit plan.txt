@@ -36,11 +36,48 @@ const TRAVEL_MODE_RATES = {
 };
 const DEFAULT_TRAVEL_MODE = 'Car';
 
-// Road-factor multiplier for the Haversine *fallback* only. When distances come
-// from the Distance Calculator sheet they're already road-adjusted, so this
-// value is only applied when a pair isn't in the matrix.
-//   1.2 = typical highway + urban mix (matches the sheet's default)
-const ROAD_FACTOR = 1.2;
+// Road factor: multiplies straight-line (Haversine) distance to approximate
+// driving distance. Distances already in the Distance Calculator matrix are
+// used as-is (the matrix is assumed road-adjusted). This factor only applies
+// when a store pair is NOT in the matrix.
+//
+// Adjustable at runtime via the 'Config' sheet (key='ROAD_FACTOR'). If the
+// sheet/cell is missing, falls back to ROAD_FACTOR_DEFAULT.
+const ROAD_FACTOR_DEFAULT = 1.35;   // bumped from 1.2 after field feedback
+                                      // (app was under-reporting vs Google Maps)
+let _roadFactorCache = null;
+
+/**
+ * Returns the current road factor. Reads from the 'Config' sheet, row where
+ * column A = 'ROAD_FACTOR' and column B holds the numeric multiplier.
+ * Cached per execution to avoid re-reading the sheet for every leg.
+ *
+ * Valid range: 1.0 (straight line) to 2.0 (heavily indirect). Values outside
+ * this range fall back to ROAD_FACTOR_DEFAULT.
+ */
+function getRoadFactor() {
+  if (_roadFactorCache != null) return _roadFactorCache;
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sh = ss.getSheetByName('Config');
+    if (sh && sh.getLastRow() >= 1) {
+      const data = sh.getDataRange().getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][0] || '').trim().toUpperCase() === 'ROAD_FACTOR') {
+          const v = Number(data[i][1]);
+          if (!isNaN(v) && v >= 1.0 && v <= 2.0) {
+            _roadFactorCache = v;
+            return v;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore; fall through to default
+  }
+  _roadFactorCache = ROAD_FACTOR_DEFAULT;
+  return ROAD_FACTOR_DEFAULT;
+}
 
 const SHEETS = {
   USERS           : 'Users',
@@ -315,7 +352,8 @@ function initializeSheets() {
                          'Visit Type', 'Is Additional', 'Status', 'Submitted On'],
     'Audit Reviews'   : ['Issue Key', 'RM Name', 'Month', 'Date', 'Issue Type',
                          'Store', 'Status', 'Reviewer', 'Reviewed On', 'Notes'],
-    'Daily Travel Mode': ['RM Name', 'Date', 'Mode', 'Updated On']
+    'Daily Travel Mode': ['RM Name', 'Date', 'Mode', 'Updated On'],
+    'Config'          : ['Key', 'Value', 'Notes']
   };
   const log = [];
   Object.keys(required).forEach(name => {
@@ -327,6 +365,11 @@ function initializeSheets() {
       sh.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8f0fe');
       sh.setFrozenRows(1);
       log.push('Created ' + name);
+      // Seed the Config sheet with the ROAD_FACTOR default row
+      if (name === 'Config') {
+        sh.getRange(2, 1, 1, 3).setValues([['ROAD_FACTOR', 1.35,
+          'Haversine multiplier. Increase (1.40-1.50) if km under-reports vs Google Maps; decrease (1.20-1.25) if it over-reports. Valid range: 1.0 to 2.0.']]);
+      }
     } else {
       const lastCol = Math.max(sh.getLastColumn(), 1);
       const curr = sh.getRange(1, 1, 1, Math.max(lastCol, headers.length)).getValues()[0];
@@ -431,63 +474,132 @@ function _assertCaller(caller) {
 }
 
 /**
+ * Diagnostic: given an RM name, returns what the system sees for their CMs.
+ * Safe to call from the editor to debug why the CM dropdown is empty.
+ */
+function diagnoseCMsForRM(rmName) {
+  const user = _lookupUser(rmName);
+  if (!user) return { error: 'User not found: ' + rmName };
+  Logger.log('User: ' + JSON.stringify(user));
+
+  const storeSh = _sheet(SHEETS.STORE_MAPPING);
+  if (!storeSh) return { error: 'Store Mapping sheet not found' };
+  const sd = storeSh.getDataRange().getValues();
+  const cmsInMapping = new Set();
+  let rmRowCount = 0;
+  for (let i = 1; i < sd.length; i++) {
+    if (_norm(sd[i][1]) === _norm(rmName)) {
+      rmRowCount++;
+      const cm = String(sd[i][2] || '').trim();
+      if (cm) cmsInMapping.add(cm);
+    }
+  }
+  Logger.log('Store Mapping rows for ' + rmName + ': ' + rmRowCount);
+  Logger.log('Distinct CMs in those rows: ' + JSON.stringify(Array.from(cmsInMapping)));
+
+  const accessible = _accessibleCMs(user);
+  Logger.log('_accessibleCMs returns: ' + JSON.stringify(accessible));
+  return {
+    rmRowCount,
+    cmsInMapping: Array.from(cmsInMapping),
+    accessible
+  };
+}
+
+/**
  * Given a user, returns the list of RMs they are allowed to act on/view.
  *   Admin → all RMs
- *   RM    → only themselves (but ALSO can view CMs under them — see _accessibleCMs)
- *   CM    → RMs in their cluster (read-only, inherited from old Cluster role)
+ *   RM    → only themselves
+ *   CM    → (empty) — CMs do not view RMs; hierarchy goes RM→CM, not CM→RM
  */
 function _accessibleRMs(user) {
   const allRMs = _listAllRMs();
   if (user.role === ROLES.ADMIN) return allRMs;
-  if (user.role === ROLES.CM) {
-    return allRMs.filter(r => _norm(r.cluster) === _norm(user.cluster));
+  if (user.role === ROLES.RM) {
+    return allRMs.filter(r => _norm(r.name) === _norm(user.canonicalName));
   }
-  return allRMs.filter(r => _norm(r.name) === _norm(user.canonicalName));
+  // CM: no RM visibility
+  return [];
 }
 
 /**
  * Given a user, returns the list of CMs they can view.
- *   Admin → all CMs
- *   RM    → CMs whose cluster matches any of this RM's stores (hierarchy: CMs
- *           reporting to this RM)
+ *   Admin → all CMs in the Users sheet
+ *   RM    → CMs whose name appears in the "CM Name" column (col C) of Store Mapping
+ *           for any of the RM's stores. This is the direct hierarchy: "CMs working
+ *           under this RM". Uses Store Mapping (not clusters) because the sheet
+ *           already encodes exactly which CM is paired with each RM.
  *   CM    → only themselves
  */
 function _accessibleCMs(user) {
+  const allCMNames = new Set();      // lowercase for lookup
+  const cmDirectory = {};            // lc → { name, cluster }
   const sh = _sheet(SHEETS.USERS);
-  if (!sh || sh.getLastRow() < 2) return [];
-  const data = sh.getDataRange().getValues();
-  const allCMs = [];
-  for (let i = 1; i < data.length; i++) {
-    const role = _canonicalRole(data[i][1] || '');
-    if (role !== ROLES.CM) continue;
-    allCMs.push({
-      name: String(data[i][0]).trim(),
-      cluster: String(data[i][2] || '').trim()
-    });
+  if (sh && sh.getLastRow() >= 2) {
+    const data = sh.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const role = _canonicalRole(data[i][1] || '');
+      if (role !== ROLES.CM) continue;
+      const name = String(data[i][0]).trim();
+      if (!name) continue;
+      allCMNames.add(_norm(name));
+      cmDirectory[_norm(name)] = { name, cluster: String(data[i][2] || '').trim() };
+    }
   }
-  if (user.role === ROLES.ADMIN) return allCMs;
-  if (user.role === ROLES.CM) return allCMs.filter(c => _norm(c.name) === _norm(user.canonicalName));
-  // RM: find clusters this RM operates in (from Store Mapping) and return CMs in those clusters
-  if (user.role === ROLES.RM) {
-    const storeSh = _sheet(SHEETS.STORE_MAPPING);
-    const clusters = new Set();
-    if (storeSh && storeSh.getLastRow() >= 2) {
-      const sd = storeSh.getDataRange().getValues();
+
+  if (user.role === ROLES.ADMIN) {
+    return Object.values(cmDirectory).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (user.role === ROLES.CM) {
+    const self = cmDirectory[_norm(user.canonicalName)];
+    return self ? [self] : [];
+  }
+  if (user.role !== ROLES.RM) return [];
+
+  // RM: scan Store Mapping for rows where RM Name = this user; collect distinct CM Names.
+  const storeSh = _sheet(SHEETS.STORE_MAPPING);
+  if (!storeSh || storeSh.getLastRow() < 2) return [];
+  const sd = storeSh.getDataRange().getValues();
+  const cmsFound = new Set();
+  for (let i = 1; i < sd.length; i++) {
+    if (_norm(sd[i][1]) !== _norm(user.canonicalName)) continue;   // col B = RM Name
+    const cmName = String(sd[i][2] || '').trim();                   // col C = CM Name
+    if (cmName) cmsFound.add(_norm(cmName));
+  }
+
+  // Return CMs from our directory that appear in Store Mapping for this RM.
+  // If a CM name shows up in Store Mapping but isn't in Users sheet, we still
+  // surface it (synthetic entry) so the RM can at least see it's there.
+  const out = [];
+  cmsFound.forEach(k => {
+    if (cmDirectory[k]) out.push(cmDirectory[k]);
+    else {
+      // Look up original (proper-case) spelling from Store Mapping
       for (let i = 1; i < sd.length; i++) {
-        if (_norm(sd[i][1]) !== _norm(user.canonicalName)) continue;
-        const c = String(sd[i][3] || '').trim();
-        if (c) clusters.add(_norm(c));
+        if (_norm(sd[i][2]) === k) {
+          out.push({ name: String(sd[i][2]).trim(), cluster: String(sd[i][3] || '').trim() });
+          break;
+        }
       }
     }
-    return allCMs.filter(c => clusters.has(_norm(c.cluster)));
-  }
-  return [];
+  });
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function _accessibleClusters(user) {
   if (user.role === ROLES.ADMIN) {
+    // Pull from BOTH Users sheet AND Store Mapping (the latter is usually
+    // more complete since every store row has a cluster).
     const set = new Set();
     _listAllRMs().forEach(r => { if (r.cluster) set.add(r.cluster); });
+    const storeSh = _sheet(SHEETS.STORE_MAPPING);
+    if (storeSh && storeSh.getLastRow() >= 2) {
+      const sd = storeSh.getDataRange().getValues();
+      for (let i = 1; i < sd.length; i++) {
+        const cl = String(sd[i][3] || '').trim();    // col D = Cluster
+        if (cl) set.add(cl);
+      }
+    }
     return Array.from(set).sort();
   }
   if (user.role === ROLES.CM) return [user.cluster];
@@ -539,31 +651,104 @@ function _buildRMClusterFromMapping() {
 
 // ======= STORE MAPPING =======
 /**
- * Returns the stores mapped to a given user.
- *   If the user is listed as RM on any store row → returns those stores.
- *   If the user is listed as CM on any store row → returns those stores
- *     (this lets a CM's dashboard show their cluster's stores).
- * Uses whichever match returns more rows; this handles users who could be
- * either (rare but possible during data migration).
+ * Returns the stores a user should see on their Visit Plan grid.
+ *
+ * Merges two sources so users never miss a store they've actually visited:
+ *   (a) stores formally mapped to them in Store Mapping (RM col B or CM col C)
+ *   (b) any store where they have at least one swipe in Login Logout
+ *
+ * Each returned row is tagged with:
+ *   mapped: true  — formally mapped in Store Mapping
+ *   mapped: false — appears only because of a swipe (unmapped)
+ *
+ * Mapped rows come from Store Mapping and preserve cmName + cluster.
+ * Unmapped rows have those fields blank (they'll display as "—").
  */
 function getStoresForRM(userName) {
   const sh = _sheet(SHEETS.STORE_MAPPING);
-  if (!sh) return [];
-  const data = sh.getDataRange().getValues();
   const target = _norm(userName);
+
+  // Step 1 — formally mapped rows (as RM or CM)
   const rmList = [];
   const cmList = [];
-  for (let i = 1; i < data.length; i++) {
-    const row = {
-      storeName: String(data[i][0]).trim(),
-      cmName   : String(data[i][2] || '').trim(),
-      cluster  : String(data[i][3] || '').trim()
-    };
-    if (_norm(data[i][1]) === target) rmList.push(row);
-    if (_norm(data[i][2]) === target) cmList.push(row);
+  if (sh && sh.getLastRow() >= 2) {
+    const data = sh.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const row = {
+        storeName: String(data[i][0]).trim(),
+        cmName   : String(data[i][2] || '').trim(),
+        cluster  : String(data[i][3] || '').trim(),
+        mapped   : true
+      };
+      if (!row.storeName) continue;
+      if (_norm(data[i][1]) === target) rmList.push(row);
+      if (_norm(data[i][2]) === target) cmList.push(row);
+    }
   }
   // Prefer RM match if it has any rows, else fall back to CM match.
-  return rmList.length ? rmList : cmList;
+  const baseList = rmList.length ? rmList : cmList;
+  const seenKeys = new Set(baseList.map(s => _storeKey(s.storeName)));
+
+  // Step 2 — walk Login Logout for any store not already in the base list
+  const swipeSh = _sheet(SHEETS.LOGIN_LOGOUT);
+  if (!swipeSh || swipeSh.getLastRow() < 2) return baseList;
+  const sd = swipeSh.getDataRange().getValues();
+  const swipeOnly = {}; // key → displayName
+  for (let i = 1; i < sd.length; i++) {
+    if (_norm(sd[i][LC.EMP_NAME]) !== target) continue;
+    const cleaned = _cleanStoreName(sd[i][LC.STORE_NAME]);
+    if (!cleaned) continue;
+    const k = _storeKey(cleaned);
+    if (seenKeys.has(k)) continue;
+    if (!swipeOnly[k]) swipeOnly[k] = cleaned;   // first-seen spelling wins
+  }
+  Object.keys(swipeOnly).forEach(k => {
+    baseList.push({
+      storeName: swipeOnly[k],
+      cmName   : '',
+      cluster  : '',
+      mapped   : false
+    });
+  });
+
+  return baseList;
+}
+
+/**
+ * Returns a map { storeKey → { lastDate: Date, lastDateKey: 'YYYY-MM-DD' } }
+ * of the most recent swipe per store for the given user, across the entire
+ * Login Logout sheet. Used to compute "Days Since Last Visit" on the Visit
+ * Plan grid.
+ *
+ * Uses ALL swipes (including the current month) — so if the RM visited a
+ * store yesterday, "days since" = 1, not "never" just because planning is
+ * happening this month.
+ *
+ * If MULTIPLE swipes exist on the same day, they collapse to that day; the
+ * "latest visit" is the latest calendar day, not the latest clock time.
+ */
+function _getLastVisitDates(userName) {
+  const out = {};
+  const sh = _sheet(SHEETS.LOGIN_LOGOUT);
+  if (!sh || sh.getLastRow() < 2) return out;
+  const data = sh.getDataRange().getValues();
+  const target = _norm(userName);
+
+  for (let i = 1; i < data.length; i++) {
+    if (_norm(data[i][LC.EMP_NAME]) !== target) continue;
+    const dt = data[i][LC.SWIPE_DATE] instanceof Date
+      ? data[i][LC.SWIPE_DATE]
+      : new Date(data[i][LC.SWIPE_DATE]);
+    if (isNaN(dt)) continue;
+    const store = _cleanStoreName(data[i][LC.STORE_NAME]);
+    if (!store) continue;
+    const key = _storeKey(store);
+    const existing = out[key];
+    if (!existing || dt.getTime() > existing.lastDate.getTime()) {
+      out[key] = { lastDate: dt, lastDateKey: _fmtDate(dt) };
+    }
+  }
+  return out;
 }
 
 // ======= STORE MASTER =======
@@ -631,7 +816,7 @@ function _distanceBetweenStores(storeA, storeB, masterMap, distMatrix) {
   if (!b || isNaN(b.lat) || isNaN(b.lon)) missing.push(storeB);
   if (missing.length) return { km: 0, missing, source: 'missing' };
   const straight = getDistance(a.lat, a.lon, b.lat, b.lon);
-  return { km: straight * ROAD_FACTOR, missing: [], source: 'haversine' };
+  return { km: straight * getRoadFactor(), missing: [], source: 'haversine' };
 }
 
 // ======= RM MASTER =======
@@ -673,8 +858,9 @@ function getTravelMode(userName) {
 function setBaseStore(caller, rmName, baseStore) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
-  if (u.role !== ROLES.RM || _norm(u.canonicalName) !== _norm(rmName)) {
-    return { success: false, message: 'Only the RM can set their own base store.' };
+  const isSelf = _norm(u.canonicalName) === _norm(rmName);
+  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+    return { success: false, message: 'Only the user can set their own base store.' };
   }
   if (!baseStore) return { success: false, message: 'Please select a base store.' };
   const stores = getStoresForRM(rmName).map(s => s.storeName);
@@ -706,9 +892,12 @@ function setBaseStore(caller, rmName, baseStore) {
 function setTravelMode(caller, rmName, mode) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
-  if (u.role !== ROLES.RM || _norm(u.canonicalName) !== _norm(rmName)) {
-    return { success: false, message: 'Only the RM can set their own travel mode.' };
+  const isSelf = _norm(u.canonicalName) === _norm(rmName);
+  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+    return { success: false, message: 'Only the user can set their own travel mode.' };
   }
+  // CMs are locked to Bike regardless of what they send
+  if (u.role === ROLES.CM) mode = 'Bike';
   if (!mode || TRAVEL_MODE_RATES[mode] == null) {
     return { success: false, message: 'Invalid travel mode. Must be Car or Bike.' };
   }
@@ -763,9 +952,11 @@ function _loadDailyModes(rmName, monthOrRange) {
 function setDailyMode(caller, rmName, dateKey, mode) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
-  if (u.role !== ROLES.RM || _norm(u.canonicalName) !== _norm(rmName)) {
-    return { success: false, message: 'Only the RM can set their own travel mode.' };
+  const isSelf = _norm(u.canonicalName) === _norm(rmName);
+  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+    return { success: false, message: 'Only the user can set their own travel mode.' };
   }
+  if (u.role === ROLES.CM) mode = 'Bike';
   if (!mode || TRAVEL_MODE_RATES[mode] == null) {
     return { success: false, message: 'Invalid mode. Must be Car or Bike.' };
   }
@@ -836,9 +1027,9 @@ function getVisitPlan(rmName, month) {
 function deleteVisitPlan(caller, rmName, month) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
-  // Only the RM can unlock their own plan
-  if (u.role !== ROLES.RM || _norm(u.canonicalName) !== _norm(rmName)) {
-    return { success: false, message: 'Only the RM can unlock their own plan.' };
+  const isSelf = _norm(u.canonicalName) === _norm(rmName);
+  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+    return { success: false, message: 'Only the user can unlock their own plan.' };
   }
   if (!month) return { success: false, message: 'Missing month.' };
   const lock = LockService.getScriptLock();
@@ -859,12 +1050,64 @@ function deleteVisitPlan(caller, rmName, month) {
   }
 }
 
+/**
+ * Admin-only: unlock a user's locked plan so they can edit it again.
+ * Flips Status from 'Locked' to 'Draft' on all Visit Plan rows matching
+ * (rmName, month). Data is preserved — only the lock flag changes.
+ *
+ * Also clears the Submitted On timestamp so the user's UI shows the plan
+ * as fresh again.
+ */
+function adminResetPlan(caller, targetUser, month) {
+  const u = _assertCaller(caller);
+  if (!u) return { success: false, message: 'Not authenticated.' };
+  if (u.role !== ROLES.ADMIN) {
+    return { success: false, message: 'Only Admin can reset plans.' };
+  }
+  if (!targetUser || !month) {
+    return { success: false, message: 'Missing user or month.' };
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return { success: false, message: 'Invalid month format.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = _sheet(SHEETS.VISIT_PLAN);
+    if (!sh || sh.getLastRow() < 2) {
+      return { success: false, message: 'No plan data found.' };
+    }
+    const data = sh.getDataRange().getValues();
+    const target = _norm(targetUser);
+    let touched = 0;
+    // Columns: 0 RM Name | 1 Month | 2 Store | 3 Date | 4 VisitType | 5 IsAdditional | 6 Status | 7 Submitted On
+    for (let i = 1; i < data.length; i++) {
+      if (_norm(data[i][0]) !== target) continue;
+      if (_monthStr(data[i][1]) !== month) continue;
+      sh.getRange(i + 1, 7).setValue('Draft');       // Status column
+      sh.getRange(i + 1, 8).setValue('');             // Submitted On column
+      touched++;
+    }
+    if (!touched) {
+      return { success: false, message: 'No plan rows found for ' + targetUser + ' in ' + month };
+    }
+    return {
+      success: true,
+      message: 'Plan unlocked for ' + targetUser + ' (' + month + '). ' +
+               touched + ' row' + (touched === 1 ? '' : 's') + ' reset to Draft.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function submitVisitPlan(caller, rmName, month, cells) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
-  // Only the RM can submit their own plan
-  if (u.role !== ROLES.RM || _norm(u.canonicalName) !== _norm(rmName)) {
-    return { success: false, message: 'Only the RM can submit their own plan.' };
+  const isSelf = _norm(u.canonicalName) === _norm(rmName);
+  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+    return { success: false, message: 'Only the user can submit their own plan.' };
   }
   if (!/^\d{4}-\d{2}$/.test(month)) return { success: false, message: 'Invalid month.' };
   if (!Array.isArray(cells)) return { success: false, message: 'Invalid cells.' };
@@ -1190,7 +1433,7 @@ function getTravelLog(rmName, monthOrRange) {
     defaultRate: defaultRate,
     availableRates: TRAVEL_MODE_RATES,
     dailyModes: dailyModes,
-    roadFactor: ROAD_FACTOR,
+    roadFactor: getRoadFactor(),
     distanceSource: distMatrix.available
       ? (sourceCount.matrix > 0 ? 'matrix' : 'haversine-fallback')
       : 'haversine',
@@ -1537,6 +1780,136 @@ function getScopeSummary(caller, monthOrRange, clusterFilter) {
   };
 }
 
+// ======= OVERVIEW TAB =======
+/**
+ * Returns a fiscal-year-wide snapshot of a user's visits:
+ *   - per-store total visit count across the FY
+ *   - per-store last visit date
+ *   - roll-up KPIs (total swipes, distinct stores, never-visited count)
+ *
+ * fyStart = starting year of the fiscal year (e.g. 2026 = Apr 2026 → Mar 2027)
+ * Called by every designation — permission-checked before returning.
+ */
+function getOverviewData(caller, viewedUser, fyStart) {
+  const u = _assertCaller(caller);
+  if (!u) return { error: 'Not authenticated.' };
+
+  // Permission: viewed user must be accessible
+  const accessibleRMs = _accessibleRMs(u);
+  const accessibleCMs = _accessibleCMs(u);
+  const isAccessible =
+    _norm(u.canonicalName) === _norm(viewedUser) ||
+    accessibleRMs.some(r => _norm(r.name) === _norm(viewedUser)) ||
+    accessibleCMs.some(c => _norm(c.name) === _norm(viewedUser));
+  if (!isAccessible) return { error: 'You do not have access to this user.' };
+
+  fyStart = Number(fyStart);
+  if (!fyStart || isNaN(fyStart)) {
+    // Default: current FY based on today
+    const today = new Date();
+    fyStart = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  }
+  const fyStartDate = new Date(fyStart, 3, 1);             // Apr 1
+  const fyEndDate   = new Date(fyStart + 1, 3, 1);          // Apr 1 next year (exclusive)
+
+  // Get full store list (mapped + swipe-only merged)
+  const stores = getStoresForRM(viewedUser);
+
+  // Read all swipes within the fiscal year for this user.
+  // VISIT COUNTING RULE: one visit per store per calendar day — so multiple
+  // login/logout swipes at the same store the same day count as 1. If the user
+  // visits store A in the morning and store B in the afternoon, that's 2 visits.
+  const sh = _sheet(SHEETS.LOGIN_LOGOUT);
+  const counts = {};       // storeKey → { display, daySet:Set<'YYYY-MM-DD'>, byMonth:{}, lastDate, mapped }
+  if (sh && sh.getLastRow() >= 2) {
+    const data = sh.getDataRange().getValues();
+    const target = _norm(viewedUser);
+    for (let i = 1; i < data.length; i++) {
+      if (_norm(data[i][LC.EMP_NAME]) !== target) continue;
+      const dt = data[i][LC.SWIPE_DATE] instanceof Date
+        ? data[i][LC.SWIPE_DATE]
+        : new Date(data[i][LC.SWIPE_DATE]);
+      if (isNaN(dt) || dt < fyStartDate || dt >= fyEndDate) continue;
+      const raw = _cleanStoreName(data[i][LC.STORE_NAME]);
+      if (!raw) continue;
+      const key = _storeKey(raw);
+      const dateKey = _fmtDate(dt);
+      if (!counts[key]) {
+        counts[key] = {
+          display: raw,
+          daySet: {},                // use object-as-set: { 'YYYY-MM-DD': true }
+          byMonth: {},               // 'YYYY-MM' → Set<dateKey>
+          lastDate: dt,
+          mapped: false
+        };
+      }
+      // Only register this date once per store (dedup login/logout same day)
+      if (!counts[key].daySet[dateKey]) {
+        counts[key].daySet[dateKey] = true;
+        const monthKey = dateKey.slice(0, 7);
+        if (!counts[key].byMonth[monthKey]) counts[key].byMonth[monthKey] = 0;
+        counts[key].byMonth[monthKey]++;
+      }
+      if (dt > counts[key].lastDate) counts[key].lastDate = dt;
+    }
+  }
+  // Merge in mapped stores (so they show up even with 0 visits)
+  stores.forEach(s => {
+    const key = _storeKey(s.storeName);
+    if (!counts[key]) {
+      counts[key] = {
+        display: s.storeName,
+        daySet: {},
+        byMonth: {},
+        lastDate: null,
+        mapped: true
+      };
+    } else {
+      counts[key].mapped = true;
+      counts[key].display = s.storeName;
+    }
+  });
+
+  // Build sorted rows: mapped first, then by visit count desc, ties alphabetical
+  const rows = Object.keys(counts).map(key => {
+    const c = counts[key];
+    const totalVisits = Object.keys(c.daySet).length;   // distinct days = visits
+    return {
+      storeName: c.display,
+      mapped: c.mapped,
+      totalVisits: totalVisits,
+      lastVisitDate: c.lastDate ? _fmtDate(c.lastDate) : null,
+      byMonth: c.byMonth
+    };
+  }).sort((a, b) => {
+    if (a.mapped !== b.mapped) return a.mapped ? -1 : 1;
+    if (a.totalVisits !== b.totalVisits) return b.totalVisits - a.totalVisits;
+    return a.storeName.localeCompare(b.storeName);
+  });
+
+  // Roll-up KPIs
+  //   totalVisits: sum of all store visits (each = 1 per store per day, deduped)
+  //   distinctStores: number of distinct stores visited at least once in the FY
+  //   mappedStores: total stores in this user's mapping
+  //   neverVisited: mapped stores that have never been visited in the FY
+  const totalVisits = rows.reduce((s, r) => s + r.totalVisits, 0);
+  const distinctVisited = rows.filter(r => r.totalVisits > 0).length;
+  const mappedStores = rows.filter(r => r.mapped).length;
+  const neverVisited = rows.filter(r => r.mapped && r.totalVisits === 0).length;
+
+  return {
+    viewedUser,
+    fyStart,
+    fyLabel: 'FY ' + fyStart + '-' + String(fyStart + 1).slice(-2),
+    kpi: {
+      totalVisits,       // kept as the primary "Total Visits" KPI
+      totalSwipes: totalVisits,  // back-compat alias for older HTML
+      distinctVisited, mappedStores, neverVisited
+    },
+    rows
+  };
+}
+
 // ======= DASHBOARD BOOTSTRAP =======
 /**
  * Main data fetch. `actorName` = the logged-in user's name (for permission check).
@@ -1565,7 +1938,7 @@ function getDashboardData(caller, viewedRM, month, range) {
   const effectiveRange = _normalizeRange(range) || _normalizeRange(month);
 
   const rmName = viewedRM;
-  const stores      = getStoresForRM(rmName);
+  let stores       = getStoresForRM(rmName);
   const plan        = getVisitPlan(rmName, month);       // Always monthly
   const planKPI     = getPlanKPIs(rmName, month);        // Always monthly
   const comparison  = getPlannedVsActual(rmName, effectiveRange);
@@ -1576,6 +1949,50 @@ function getDashboardData(caller, viewedRM, month, range) {
   const travelMode  = getTravelMode(rmName);
   const allStores   = getAllStoreNames();
   const uniqueCMs   = Array.from(new Set(stores.map(s => s.cmName).filter(Boolean))).sort();
+
+  // Enrich each store with lastVisitDate + daysSinceLastVisit.
+  // "Days since" is measured from TODAY back to the latest swipe date, using
+  // all-time swipe data (including any already logged this month).
+  const lastVisits = _getLastVisitDates(rmName);
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  stores = stores.map(s => {
+    const lv = lastVisits[_storeKey(s.storeName)];
+    if (lv) {
+      // Zero-out the time portion on the visit date so we compare full days.
+      const lvDay = new Date(lv.lastDate.getFullYear(), lv.lastDate.getMonth(), lv.lastDate.getDate());
+      const diffMs = todayStart.getTime() - lvDay.getTime();
+      const days = Math.max(0, Math.round(diffMs / 86400000));
+      return Object.assign({}, s, {
+        lastVisitDate: lv.lastDateKey,
+        daysSinceLastVisit: days
+      });
+    }
+    return Object.assign({}, s, {
+      lastVisitDate: null,
+      daysSinceLastVisit: null     // null = "Never visited"
+    });
+  });
+
+  // Sort order:
+  //   1. Mapped stores first, unmapped (swipe-only) rows last
+  //   2. Within mapped: never-visited first (most urgent), then descending
+  //      by daysSinceLastVisit, ties broken alphabetically
+  //   3. Within unmapped: alphabetical
+  stores.sort((a, b) => {
+    const aMapped = a.mapped !== false;
+    const bMapped = b.mapped !== false;
+    if (aMapped !== bMapped) return aMapped ? -1 : 1;
+    if (!aMapped && !bMapped) return a.storeName.localeCompare(b.storeName);
+
+    const aNever = a.daysSinceLastVisit == null;
+    const bNever = b.daysSinceLastVisit == null;
+    if (aNever !== bNever) return aNever ? -1 : 1;
+    if (aNever && bNever) return a.storeName.localeCompare(b.storeName);
+    if (a.daysSinceLastVisit !== b.daysSinceLastVisit)
+      return b.daysSinceLastVisit - a.daysSinceLastVisit;
+    return a.storeName.localeCompare(b.storeName);
+  });
 
   const days = _daysInMonth(month);
   const [yr, mo] = month.split('-').map(Number);
