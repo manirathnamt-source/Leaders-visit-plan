@@ -49,48 +49,83 @@
   #login-error{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
 
   #app-view{display:none}
-  .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--card);padding:12px 16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:10px}
-  .topbar h1{font-size:16px;color:var(--primary);font-weight:600}
+
+  /* ===== Top bar: brand + user + refresh + logout ===== */
+  .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--card);padding:10px 18px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:8px}
+  .brand{display:flex;align-items:center;gap:8px}
+  .brand-icon{font-size:20px}
+  .brand-name{font-size:17px;color:var(--primary);font-weight:700;letter-spacing:.2px}
   .topbar .right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .role-pill{padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;letter-spacing:.3px;color:#fff}
+  .user-block{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;background:#f8fafc;border-radius:20px;border:1px solid var(--border)}
+  .user-label{font-size:13px;color:var(--text);font-weight:600}
+  .role-pill{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:.3px;color:#fff}
   .role-pill.RM{background:var(--primary)}
   .role-pill.CM{background:var(--cluster)}
   .role-pill.Admin{background:var(--admin)}
-  .refresh-indicator{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
-  .refresh-dot{width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+  .refresh-indicator{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;padding-left:6px;border-left:1px solid var(--border)}
+  .refresh-dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .btn-icon{background:#f1f3f4;border:1px solid var(--border);border-radius:8px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;padding:0;transition:all 0.15s}
+  .btn-icon:hover{background:#e8f0fe;border-color:var(--primary)}
+  .btn-icon.spinning #refresh-icon{animation:spin 0.8s linear infinite;display:inline-block}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
-  /* Scope bar (cluster/admin) */
-  .scope-bar{
-    background:#eef4ff;border:1px solid #c7d8ff;padding:10px 14px;border-radius:8px;
-    margin-bottom:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px;
-  }
-  .scope-bar.admin{background:#f4e8fa;border-color:#d4a6eb}
-  .scope-bar label{font-weight:600;color:var(--text)}
-  .scope-bar select{min-width:180px}
+  /* ===== Control bars (Month + Context) ===== */
+  .control-bar{display:flex;align-items:center;gap:14px;background:var(--card);padding:8px 14px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:8px;flex-wrap:wrap}
+  .control-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:1}
+  .control-right{display:flex;align-items:center;gap:10px}
+  .fy-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;white-space:nowrap;padding:4px 10px;background:#f1f3f4;border-radius:5px}
+  .month-buttons{display:inline-flex;flex-wrap:wrap;gap:2px;border:1px solid var(--border);border-radius:6px;padding:2px;background:#f8fafc}
+  .month-btn{padding:5px 11px;border:none;background:transparent;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;border-radius:4px;transition:all 0.12s;min-width:46px}
+  .month-btn:hover{background:#e8f0fe;color:var(--primary)}
+  .month-btn.active{background:var(--primary);color:#fff}
+  .month-btn.active:hover{background:var(--primary-dark);color:#fff}
+  .month-btn.future{opacity:0.45}
 
-  .settings-bar{background:#fff9e6;border:1px solid #f9ab00;padding:10px 14px;border-radius:8px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px}
-  .settings-bar.configured{background:#e6f4ea;border-color:#34a853}
-  .settings-bar label{font-weight:600;color:var(--text)}
-  .settings-bar select{min-width:200px}
-  .view-only-banner{background:#eef4ff;border:1px solid #c7d8ff;color:var(--primary-dark);padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:12px}
+  /* Report range: compact summary button + expandable editor */
+  .range-summary-btn{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--text);font-weight:500;transition:all 0.15s}
+  .range-summary-btn:hover{background:#e8f0fe;border-color:var(--primary);color:var(--primary)}
+  .range-summary-btn.customized{background:#fff8e1;border-color:#ffcc80;color:#b06000}
+  .range-icon{font-size:14px}
+  .range-chevron{font-size:10px;color:var(--muted);transition:transform 0.15s}
+  .range-summary-btn.open .range-chevron{transform:rotate(180deg)}
+  .range-editor{display:flex;align-items:center;gap:10px;padding:10px 18px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:13px;flex-wrap:wrap;animation:slideDown 0.2s ease}
+  .range-editor label{color:var(--muted);font-weight:600}
+  .range-editor input[type="date"]{padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:#fff}
+  @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
-  /* Tabs */
-  .tabs{display:flex;gap:4px;background:var(--card);padding:6px;border-radius:10px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex-wrap:wrap}
-  .tab-btn{flex:1;min-width:110px;background:transparent;color:var(--muted);padding:10px 14px;border-radius:6px;font-weight:500}
+  /* Context bar (scope + RM view + mode toggle merged into one row) */
+  .context-bar{background:#eef4ff;border:1px solid #d4e3ff}
+  .ctx-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ctx-icon{font-size:15px}
+  .ctx-label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+  .ctx-select{min-width:150px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:#fff}
+  /* Admin version of context bar gets purple tint */
+  .context-bar.admin{background:#f6edfb;border-color:#d4a6eb}
+
+  .view-only-banner{background:#fef7e0;border:1px solid #f9ab00;color:#5f4b00;padding:7px 14px;border-radius:6px;margin-bottom:8px;font-size:12.5px}
+
+  /* ===== Tabs ===== */
+  .tabs{display:flex;gap:3px;background:var(--card);padding:5px;border-radius:10px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex-wrap:wrap}
+  .tab-btn{flex:1;min-width:110px;background:transparent;color:var(--muted);padding:9px 14px;border-radius:6px;font-weight:600;font-size:13px;transition:all 0.12s}
   .tab-btn.active{background:var(--primary);color:#fff}
   .tab-btn:hover:not(.active){background:#f1f3f4;color:var(--text)}
   .tab-btn .badge-count{background:var(--danger);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px}
   .tab-btn.active .badge-count{background:#fff;color:var(--danger)}
 
-  /* Travel mode toggle */
+  /* ===== Travel mode toggle (in context bar) ===== */
   .mode-toggle{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fff}
 
-  /* Report Range bar */
-  .range-bar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:#f5f7fa;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
-  .range-bar label{color:var(--muted);font-weight:500}
-  .range-bar input[type="date"]{padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:#fff}
-  .range-bar.multi-month{background:#fff8e1;border-bottom-color:#ffcc80}
+  /* Base Store footer (bottom of Visit Plan) */
+  .base-store-footer{margin-top:20px;padding:14px 18px;background:#f8fafc;border:1px solid var(--border);border-radius:8px}
+  .base-store-footer.readonly{background:#f5f5f5}
+  .base-store-header{font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px}
+  .base-store-body{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .base-store-select{min-width:280px;padding:7px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-size:13px}
+  .base-store-status{color:var(--muted);font-size:12px;margin-left:8px}
+
+  /* Travel mode toggle */
+  .mode-toggle{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fff}
   .btn-sm{padding:5px 10px;font-size:12px}
   .mode-btn{background:transparent;color:var(--muted);padding:7px 14px;font-size:13px;font-weight:500;border-radius:0;border-right:1px solid var(--border)}
   .mode-btn:last-child{border-right:none}
@@ -132,7 +167,7 @@
   .legend-item{display:flex;align-items:center;padding:2px 6px;gap:4px}
   .legend-badge{display:inline-block;min-width:28px;padding:2px 6px;border-radius:3px;color:#fff;font-weight:700;font-size:11px;text-align:center}
 
-  .vp-grid-wrap{background:var(--card);overflow-x:auto;border-bottom-left-radius:10px;border-bottom-right-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .vp-grid-wrap{background:var(--card);overflow:auto;max-height:calc(100vh - 300px);min-height:400px;border-bottom-left-radius:10px;border-bottom-right-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
   .vp-grid{border-collapse:collapse;font-size:12px;min-width:100%}
   .vp-grid th,.vp-grid td{border:1px solid #e5e7eb;padding:0;text-align:center;height:34px;white-space:nowrap}
   .vp-grid thead th{background:var(--navy);color:#fff;font-weight:600;font-size:11px;padding:6px 8px;position:sticky;top:0;z-index:3}
@@ -145,6 +180,58 @@
   .vp-grid tbody td.cm-cell{color:var(--muted);font-style:italic;font-size:11px}
   .vp-grid tbody tr.additional-row td.sticky-col{background:#fff4e5;color:#a05a00}
   .vp-grid tbody tr.additional-row td.store-cell::before{content:'+ ';color:var(--warning);font-weight:700}
+
+  /* Swipe-only (unmapped) stores — visited but not in Store Mapping */
+  .vp-grid tbody tr.swipe-only-row td.sticky-col{background:#f3e8ff;color:#5b21b6}
+  .unmapped-flag{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px;background:#ddd6fe;color:#5b21b6;letter-spacing:.4px;text-transform:uppercase;margin-left:6px;vertical-align:middle}
+
+  /* Overview tab */
+  .ov-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:4px}
+  .ov-kpi{background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+  .ov-kpi.warn{background:#fef7e0;border-color:#f9ab00}
+  .ov-kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+  .ov-kpi-value{font-size:26px;font-weight:700;color:var(--text);margin-top:4px}
+  .ov-table-wrap{overflow-x:auto;margin-top:8px;border:1px solid var(--border);border-radius:8px}
+  .ov-table{width:100%;border-collapse:collapse;font-size:13px}
+  .ov-table thead th{background:#1a3365;color:#fff;padding:10px 12px;text-align:left;font-weight:600;position:sticky;top:0;z-index:3}
+  .ov-table thead th.num{text-align:right}
+  .ov-table tbody td{padding:9px 12px;border-top:1px solid #f1f3f4;text-align:left}
+  .ov-table tbody td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ov-table tbody tr:hover{background:#f8fafc}
+  .ov-table tbody tr.unmapped-row td.sticky-col{background:#f3e8ff}
+  .ov-table tbody tr.never-visited-row td{color:#c5221f}
+  .ov-table .store-link{font-weight:600;color:var(--primary)}
+  .ov-table .store-link:hover{text-decoration:underline}
+
+  /* Popup modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-overlay.open{display:flex}
+  .modal-dialog{background:#fff;border-radius:10px;min-width:480px;max-width:90vw;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border)}
+  .modal-head h3{font-size:17px;margin:0;color:var(--text)}
+  .modal-close{background:transparent;border:none;font-size:26px;color:var(--muted);cursor:pointer;padding:0;width:34px;height:34px;border-radius:6px}
+  .modal-close:hover{background:#f1f3f4;color:var(--text)}
+  .modal-body{padding:18px 20px;overflow-y:auto}
+
+  .ov-popup-total{padding:10px 14px;background:#f8fafc;border-radius:6px;font-size:14px;margin-bottom:14px}
+  .ov-popup-table{width:100%;border-collapse:collapse;font-size:13px}
+  .ov-popup-table thead th{background:#f1f3f4;padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid var(--border)}
+  .ov-popup-table thead th.num{text-align:right}
+  .ov-popup-table tbody td{padding:8px 12px;border-bottom:1px solid #f1f3f4}
+  .ov-popup-table tbody td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .ov-popup-table tbody tr.zero td{color:var(--muted)}
+  .ov-popup-bar-bg{height:12px;background:#f1f3f4;border-radius:3px;overflow:hidden}
+  .ov-popup-bar{height:100%;background:linear-gradient(90deg, var(--primary), var(--primary-dark));border-radius:3px;transition:width .3s}
+
+  /* Days Since Last Visit badge (under store name) */
+  .store-name-line{line-height:1.3}
+  .store-days-line{margin-top:3px}
+  .days-badge{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:10px;font-style:normal;letter-spacing:.1px}
+  .days-badge.fresh {background:#e6f4ea;color:#137333}    /* 0-7 days */
+  .days-badge.normal{background:#f1f3f4;color:#5f6368}    /* 8-14 days */
+  .days-badge.aging {background:#fef7e0;color:#b06000}    /* 15-30 days */
+  .days-badge.stale {background:#fce8e6;color:#c5221f}    /* 31+ days */
+  .days-badge.never {background:#fce8e6;color:#c5221f;font-weight:700}
   .sticky-col{position:sticky;left:0;z-index:2}
   .sticky-col.col2{left:170px}
   .vp-grid thead th.sticky-col{left:0}
@@ -152,7 +239,7 @@
   .vp-grid tbody td.day-cell{padding:0;min-width:50px;position:relative}
   .vp-grid tbody td.day-cell.weekend{background:var(--weekend-bg)}
   .day-select{width:100%;height:32px;border:none;background:transparent;font-size:11px;font-weight:700;text-align:center;text-align-last:center;cursor:pointer;color:var(--muted);appearance:none;-webkit-appearance:none;-moz-appearance:none;padding:0 2px}
-  .day-select:focus{outline:2px solid var(--primary);outline-offset:-2px}
+  .day-select:focus{outline:2px solid var(--primary);outline-offset:-2px;scroll-margin-top:60px;scroll-margin-left:200px}
   .day-cell.has-value{color:#fff}
   .day-cell.has-value .day-select{color:#fff}
   .day-cell.cell-disabled{background:#e0e0e0 !important;cursor:not-allowed}
@@ -275,82 +362,113 @@
 <!-- ========== MAIN APP ========== -->
 <div id="app-view">
 
+  <!-- Top header bar: brand + user identity + refresh + logout -->
   <div class="topbar">
-    <h1>📊 Visit Tracker</h1>
+    <div class="brand">
+      <span class="brand-icon">📊</span>
+      <span class="brand-name">Visit Tracker</span>
+    </div>
     <div class="right">
-      <span id="role-pill" class="role-pill"></span>
-      <span id="user-label" style="font-size:13px;color:var(--muted);font-weight:500"></span>
-      <label style="font-size:12px;color:var(--muted)">Plan Month:</label>
-      <input type="month" id="month-picker" onchange="onMonthChange()">
-      <span class="refresh-indicator">
-        <span class="refresh-dot"></span>
-        <span id="refresh-status">Auto-refresh on</span>
-      </span>
+      <div class="user-block">
+        <span id="role-pill" class="role-pill"></span>
+        <span id="user-label" class="user-label"></span>
+        <span class="refresh-indicator">
+          <span class="refresh-dot"></span>
+          <span id="refresh-status">Synced</span>
+        </span>
+      </div>
+      <button class="btn-icon" onclick="manualRefresh()" title="Refresh now" id="manual-refresh-btn">
+        <span id="refresh-icon">🔄</span>
+      </button>
       <button class="btn-secondary" onclick="doLogout()">Logout</button>
     </div>
   </div>
 
-  <!-- Report Range bar (applies to analytics tabs: Planned vs Actual, Travel Log, Audit, Summary) -->
-  <div id="range-bar" class="range-bar">
+  <!-- Row 1: FY + month buttons + compact range summary -->
+  <div id="month-bar" class="control-bar">
+    <div class="control-left">
+      <span class="fy-label" id="fy-label">FY</span>
+      <div class="month-buttons" id="month-buttons"></div>
+    </div>
+    <div class="control-right">
+      <button class="range-summary-btn" onclick="toggleRangeExpand()" id="range-summary-btn" title="Click to customize report range">
+        <span class="range-icon">📅</span>
+        <span id="range-summary-label">Full month · 30 days</span>
+        <span class="range-chevron" id="range-chevron">▾</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Expandable range editor (hidden by default, toggled from summary button) -->
+  <div id="range-editor" class="range-editor" style="display:none">
     <span>📅</span>
     <label>Report Range:</label>
     <input type="date" id="range-from" onchange="onRangeChange()">
     <span style="color:var(--muted)">to</span>
     <input type="date" id="range-to" onchange="onRangeChange()">
-    <button type="button" class="btn-secondary btn-sm" onclick="resetRangeToMonth()"
-            title="Reset to the full Plan Month selected above">Match month</button>
+    <button type="button" class="btn-secondary btn-sm" onclick="resetRangeToMonth()">Match month</button>
     <span id="range-status" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
   </div>
 
-  <!-- Scope bar (CM / Admin) -->
-  <div id="scope-bar" class="scope-bar" style="display:none">
-    <span id="scope-icon">🏢</span>
-    <span id="scope-label"></span>
-    <label>Cluster:</label>
-    <select id="cluster-select" onchange="onClusterChange()"></select>
-    <label>Viewing RM:</label>
-    <select id="rm-select" onchange="onRMChange()"></select>
-    <button class="btn-secondary btn-sm" onclick="showSummaryView()">📊 Scope Summary</button>
-  </div>
+  <!-- Hidden fallback month picker — JS still reads/writes it for internal state. -->
+  <input type="hidden" id="month-picker">
 
-  <!-- RM-only: OWN / CM selector (RMs can view their CMs' data read-only) -->
-  <div id="rm-view-bar" class="scope-bar" style="display:none;background:#eef6ff;border-bottom-color:#9ccbff">
-    <span>👁️</span>
-    <label>Viewing:</label>
-    <select id="rm-view-select" onchange="onRMViewChange()">
-      <option value="__OWN__">OWN (my own data)</option>
-    </select>
-    <span id="rm-view-hint" style="color:var(--muted);font-size:12px"></span>
-  </div>
-
-  <div id="settings-bar" class="settings-bar" style="display:none">
-    <span>🏠</span>
-    <label>Base Store:</label>
-    <select id="base-store-select"></select>
-    <button class="btn-primary" onclick="saveBaseStore()" id="save-base-btn">Save</button>
-    <span style="color:var(--muted);margin:0 8px">|</span>
-    <span>🚗</span>
-    <label title="Default mode applied to days you haven't set individually in Travel Log">Default Mode:</label>
-    <div class="mode-toggle">
-      <button type="button" class="mode-btn" data-mode="Car"  onclick="setTravelMode('Car')">🚗 Car</button>
-      <button type="button" class="mode-btn" data-mode="Bike" onclick="setTravelMode('Bike')">🏍️ Bike</button>
+  <!-- Row 2: context strip (Viewing / Scope / Mode) — merges old scope, rm-view, settings bars -->
+  <div id="context-bar" class="control-bar context-bar" style="display:none">
+    <!-- Scope (Admin only) -->
+    <div id="scope-bar" class="ctx-group" style="display:none">
+      <span id="scope-icon" class="ctx-icon">👑</span>
+      <label class="ctx-label">Cluster:</label>
+      <select id="cluster-select" onchange="onClusterChange()" class="ctx-select"></select>
+      <label class="ctx-label">RM:</label>
+      <select id="rm-select" onchange="onRMChange()" class="ctx-select"></select>
+      <button class="btn-secondary btn-sm" onclick="showSummaryView()">📊 Summary</button>
     </div>
-    <span id="base-status" style="color:var(--muted);font-size:12px"></span>
+
+    <!-- RM-only: OWN / CM selector -->
+    <div id="rm-view-bar" class="ctx-group" style="display:none">
+      <span class="ctx-icon">👁️</span>
+      <label class="ctx-label">Viewing:</label>
+      <select id="rm-view-select" onchange="onRMViewChange()" class="ctx-select">
+        <option value="__OWN__">OWN (my data)</option>
+      </select>
+      <span id="rm-view-hint" style="color:var(--muted);font-size:12px"></span>
+    </div>
+
+    <!-- Default travel mode (RM only, Admin in view) -->
+    <div id="settings-bar" class="ctx-group" style="display:none;margin-left:auto">
+      <span class="ctx-icon">🚗</span>
+      <label class="ctx-label" title="Default mode applied to days you haven't set individually in Travel Log">Mode:</label>
+      <div class="mode-toggle">
+        <button type="button" class="mode-btn" data-mode="Car"  onclick="setTravelMode('Car')">🚗 Car</button>
+        <button type="button" class="mode-btn" data-mode="Bike" onclick="setTravelMode('Bike')">🏍️ Bike</button>
+      </div>
+    </div>
   </div>
 
   <div id="view-only-banner" class="view-only-banner" style="display:none">
-    👁️ <b>View-only mode</b> — you can browse this RM's data but cannot make changes.
+    👁️ <b>View-only mode</b> — you can browse this user's data but cannot make changes.
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="plan"    onclick="switchTab('plan')">📅 Visit Plan</button>
-    <button class="tab-btn"        data-tab="actual"  onclick="switchTab('actual')">✅ Planned vs Actual</button>
-    <button class="tab-btn"        data-tab="travel"  onclick="switchTab('travel')">🚗 Travel Log</button>
-    <button class="tab-btn"        data-tab="audit"   onclick="switchTab('audit')">🔍 Audit <span id="audit-count" class="badge-count" style="display:none">0</span></button>
-    <button class="tab-btn"        data-tab="summary" id="tab-summary" onclick="switchTab('summary')" style="display:none">📊 Summary</button>
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button>
+    <button class="tab-btn"         data-tab="plan"    onclick="switchTab('plan')">📅 Visit Plan</button>
+    <button class="tab-btn"         data-tab="actual"  onclick="switchTab('actual')">✅ Planned vs Actual</button>
+    <button class="tab-btn"         data-tab="travel"  onclick="switchTab('travel')">🚗 Travel Log</button>
+    <button class="tab-btn"         data-tab="audit"   onclick="switchTab('audit')">🔍 Audit <span id="audit-count" class="badge-count" style="display:none">0</span></button>
+    <button class="tab-btn"         data-tab="summary" id="tab-summary" onclick="switchTab('summary')" style="display:none">📊 Summary</button>
   </div>
 
-  <div class="panel active" id="panel-plan"><div id="visit-plan-container"><div class="empty">Loading…</div></div></div>
+  <!-- Overview tab: KPI roll-up + store-wise visit counts. Click any store to see month-wise breakdown. -->
+  <div class="panel active" id="panel-overview">
+    <div class="panel-head">
+      <h2 id="overview-heading">Overview</h2>
+      <small style="color:var(--muted)">Click any store for month-wise visit history</small>
+    </div>
+    <div id="overview-content"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="panel other" id="panel-plan"><div id="visit-plan-container"><div class="empty">Loading…</div></div></div>
 
   <div class="panel other" id="panel-actual">
     <div id="top-perf-box"></div>
@@ -451,13 +569,99 @@ function showToast(msg, type){
   setTimeout(()=> t.className = 'toast', 3500);
 }
 function currentMonthDefault(){
+  // Default to today's month, but clamp to within the current fiscal year
+  // so the month-button strip always highlights something valid.
   const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  const ym = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  const fyStart = currentFYStart();
+  const fyMonths = fiscalYearMonths(fyStart);
+  if (fyMonths.some(m => m.ym === ym)) return ym;
+  // Fallback: first month of current FY (April)
+  return fyMonths[0].ym;
 }
 function monthLabel(ym){
   const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const [y, m] = ym.split('-').map(Number);
   return names[m-1] + '-' + String(y).slice(-2);
+}
+
+/* ============ FISCAL YEAR HELPERS ============ */
+/**
+ * Returns the fiscal year anchored to today's date.
+ * Fiscal year runs April → March. Example:
+ *   Today = Apr 22, 2026 → FY starts Apr 2026, ends Mar 2027 → returns 2026
+ *   Today = Feb 15, 2026 → FY started Apr 2025, ends Mar 2026 → returns 2025
+ */
+function currentFYStart(){
+  const d = new Date();
+  return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+}
+
+/**
+ * Returns the 12 months of the fiscal year in display order.
+ * Each entry: { ym: '2026-04', short: 'Apr', monthNum: 4, year: 2026, isFuture: bool }
+ */
+function fiscalYearMonths(fyStart){
+  const today = new Date();
+  const todayYM = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const out = [];
+  // Months 4..12 of fyStart year, then 1..3 of fyStart+1 year
+  const order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+  order.forEach(m => {
+    const year = m >= 4 ? fyStart : fyStart + 1;
+    const ym = year + '-' + String(m).padStart(2, '0');
+    out.push({
+      ym, short: names[m - 1], monthNum: m, year,
+      isFuture: ym > todayYM
+    });
+  });
+  return out;
+}
+
+/**
+ * Renders the 12-month button strip with the current one highlighted.
+ * Called on login, on month-change, and when the FY changes (not common).
+ */
+function renderMonthButtons(){
+  const fyStart = currentFYStart();
+  const months = fiscalYearMonths(fyStart);
+  const container = $('month-buttons');
+  if (!container) return;
+  const label = $('fy-label');
+  if (label) label.textContent = 'FY ' + fyStart + '-' + String(fyStart + 1).slice(-2);
+  container.innerHTML = months.map(m =>
+    '<button type="button" class="month-btn' +
+      (m.ym === currentMonth ? ' active' : '') +
+      (m.isFuture ? ' future' : '') +
+      '" data-ym="' + m.ym + '" onclick="selectMonth(\'' + m.ym + '\')" title="' +
+      m.short + ' ' + m.year + '">' + m.short + '</button>'
+  ).join('');
+  // Hint: note if the selected month is outside the current FY (shouldn't happen with buttons but possible via API)
+  const hint = $('month-bar-hint');
+  if (hint){
+    const inFY = months.some(m => m.ym === currentMonth);
+    hint.textContent = inFY ? '' : '(viewing ' + (currentMonth || '—') + ', outside current FY)';
+  }
+}
+
+/**
+ * Click handler for a month button. Sets Plan Month and resets Report Range
+ * to the full month, then reloads all tabs.
+ */
+function selectMonth(ym){
+  if (!ym || ym === currentMonth) return;
+  currentMonth = ym;
+  currentRange = fullMonthRange(ym);
+  draftGrid = {};
+  additionalStores = [];
+  const mp = $('month-picker');
+  if (mp) mp.value = ym;
+  renderMonthButtons();
+  syncRangeInputs();
+  renderRangeStatus();
+  loadDashboard();
+  if ($('panel-summary').classList.contains('active')) loadSummary();
 }
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c =>
@@ -506,6 +710,13 @@ let loginNameRoleMap = {};
  */
 function populateLoginNames(){
   const sel = $('login-name');
+  // Guard against being called before the Apps Script bridge loads.
+  // Shouldn't happen given window.load wrapper, but protects against
+  // edge cases like logout + fast second login.
+  if (typeof google === 'undefined' || !google.script || !google.script.run){
+    whenGoogleReady(() => populateLoginNames());
+    return;
+  }
   google.script.run
     .withSuccessHandler(list => {
       if (!list || !list.length){
@@ -569,10 +780,9 @@ function doLogin(){
           currentRM = actor.name;
           selectedCluster = actor.cluster || '';
         } else if (isCM()){
-          // CM sees RMs in their cluster
-          selectedCluster = actor.cluster || accessibleClusters[0] || '';
-          const firstInCluster = accessibleRMs.find(r => (r.cluster || '') === selectedCluster);
-          currentRM = firstInCluster ? firstInCluster.name : (accessibleRMs[0] && accessibleRMs[0].name) || null;
+          // CM sees only their own data
+          currentRM = actor.name;
+          selectedCluster = actor.cluster || '';
         } else {
           // Admin: default to first accessible RM
           selectedCluster = accessibleClusters[0] || '';
@@ -584,6 +794,7 @@ function doLogin(){
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
         $('month-picker').value = currentMonth;
+        renderMonthButtons();
         syncRangeInputs();
         renderRangeStatus();
         applyRoleUI();        // Hides CM-forbidden tabs (Travel Log)
@@ -639,37 +850,32 @@ function bootstrapAfterLogin(){
   // Role pill + user label
   $('role-pill').textContent = actor.role;
   $('role-pill').className = 'role-pill ' + actor.role;
-  $('user-label').textContent = actor.name + (actor.cluster ? ' · ' + actor.cluster : '');
+  refreshUserLabel();
 
-  // Scope bar for CM/Admin
+  // Scope bar is ADMIN-ONLY (picks any RM/cluster).
+  // RMs use the RM-view bar (OWN / their CMs).
+  // CMs only see their own data — no scope selector at all.
   const scopeBar = $('scope-bar');
-  if (isRM()){
-    scopeBar.style.display = 'none';
-  } else {
+  if (isAdmin()){
     scopeBar.style.display = 'flex';
-    scopeBar.classList.toggle('admin', isAdmin());
-    $('scope-icon').textContent = isAdmin() ? '👑' : '🏢';
-    $('scope-label').textContent = (isAdmin() ? 'ADMIN' : 'CM') +
-      (actor.cluster ? ' · ' + actor.cluster : '');
-    // Cluster dropdown (Admin gets all; CM gets their single cluster)
+    scopeBar.classList.add('admin');
+    $('scope-icon').textContent = '👑';
+    $('scope-label').textContent = 'ADMIN' + (actor.cluster ? ' · ' + actor.cluster : '');
     const clSel = $('cluster-select');
-    if (isAdmin()){
-      clSel.innerHTML = '<option value="">All Clusters</option>' +
-        accessibleClusters.map(c => '<option value="' + escapeHtml(c) + '"' +
-          (c === selectedCluster ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('');
-      clSel.disabled = false;
-    } else {
-      clSel.innerHTML = '<option value="' + escapeHtml(selectedCluster) + '">' + escapeHtml(selectedCluster || '—') + '</option>';
-      clSel.disabled = true;
-    }
+    clSel.innerHTML = '<option value="">All Clusters</option>' +
+      accessibleClusters.map(c => '<option value="' + escapeHtml(c) + '"' +
+        (c === selectedCluster ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('');
+    clSel.disabled = false;
     rebuildRMSelect();
     $('tab-summary').style.display = 'inline-block';
+  } else {
+    scopeBar.style.display = 'none';
   }
 
-  // RM view selector (OWN / CMs under this RM)
+  // RM view selector — only visible when an RM has at least one CM under them
   renderRMViewBar();
 
-  // Set view-only banner + settings-bar based on who's being viewed
+  // Banner + settings-bar depend on who's being viewed
   applyViewingUI();
 
   loadDashboard();
@@ -716,27 +922,61 @@ function onRMViewChange(){
 /**
  * Recomputes which bars are visible based on the current viewing context.
  * Call this whenever currentRM changes.
+ *
+ *   Editing own data  → no banner, settings bar visible
+ *   Viewing someone   → read-only banner, settings bar hidden
+ *
+ * "Own" means: the currently-viewed user (currentRM) is the logged-in user.
  */
 function applyViewingUI(){
-  const viewingSelf = isRM() && currentRM &&
+  const viewingSelf = (isRM() || isCM()) && currentRM &&
                       String(currentRM).trim().toLowerCase() ===
                       String(actor.name).trim().toLowerCase();
 
-  // RM viewing a CM (or any non-self) → show the view-only banner, hide settings
-  if (isRM()){
-    $('view-only-banner').style.display = viewingSelf ? 'none' : 'block';
-    $('settings-bar').style.display     = viewingSelf ? 'flex' : 'none';
+  if (isAdmin()){
+    $('view-only-banner').style.display = 'block';
+    $('settings-bar').style.display     = 'none';
+  } else if (viewingSelf){
+    $('view-only-banner').style.display = 'none';
+    $('settings-bar').style.display     = 'flex';
   } else {
-    // CM/Admin always view-only for plan editing
     $('view-only-banner').style.display = 'block';
     $('settings-bar').style.display     = 'none';
   }
 
-  // Hint text on the RM-view selector
   const hint = $('rm-view-hint');
   if (hint){
     hint.textContent = viewingSelf ? '' : '· Read-only view of ' + currentRM;
   }
+
+  // Show the outer context-bar container whenever any of its groups has content.
+  // Scope bar = admin; rm-view-bar = RM with CMs; settings-bar = editable user.
+  const ctxBar = $('context-bar');
+  if (ctxBar){
+    const anyVisible = [
+      $('scope-bar'), $('rm-view-bar'), $('settings-bar')
+    ].some(el => el && el.style.display && el.style.display !== 'none');
+    ctxBar.style.display = anyVisible ? 'flex' : 'none';
+    ctxBar.classList.toggle('admin', !!isAdmin());
+  }
+}
+
+/**
+ * Updates the top-right user label to show what Admin is currently viewing.
+ * For RM/CM it shows their own name + cluster. For Admin, it shows the current
+ * RM being viewed + cluster, so the context is always clear.
+ */
+function refreshUserLabel(){
+  if (!actor) return;
+  let txt = actor.name;
+  if (isAdmin() && currentRM){
+    const rm = accessibleRMs.find(r => r.name === currentRM);
+    const cluster = rm && rm.cluster ? rm.cluster : '';
+    txt = 'Admin · viewing ' + currentRM + (cluster ? ' (' + cluster + ')' : '');
+  } else if (actor.cluster){
+    txt = actor.name + ' · ' + actor.cluster;
+  }
+  $('user-label').textContent = txt;
 }
 
 function rebuildRMSelect(){
@@ -748,10 +988,14 @@ function rebuildRMSelect(){
     currentRM = null;
     return;
   }
-  rmSel.innerHTML = filtered.map(r =>
-    '<option value="' + escapeHtml(r.name) + '"' +
-    (r.name === currentRM ? ' selected' : '') + '>' +
-    escapeHtml(r.name) + '</option>').join('');
+  rmSel.innerHTML = filtered.map(r => {
+    // Show cluster in parentheses after RM name for easy visual reference
+    const label = r.cluster
+      ? escapeHtml(r.name) + ' (' + escapeHtml(r.cluster) + ')'
+      : escapeHtml(r.name);
+    return '<option value="' + escapeHtml(r.name) + '"' +
+      (r.name === currentRM ? ' selected' : '') + '>' + label + '</option>';
+  }).join('');
   // If currentRM not in filtered set, reset to first
   if (!filtered.some(r => r.name === currentRM)){
     currentRM = filtered[0].name;
@@ -762,11 +1006,27 @@ function rebuildRMSelect(){
 function onClusterChange(){
   selectedCluster = $('cluster-select').value;
   rebuildRMSelect();
+  refreshUserLabel();
   loadDashboard();
 }
 function onRMChange(){
   currentRM = $('rm-select').value;
-  if (currentRM) loadDashboard();
+  if (!currentRM) return;
+  // Sync cluster dropdown to the chosen RM's cluster (Admin only).
+  // This way when Admin picks an RM, the cluster filter above reflects it.
+  if (isAdmin()){
+    const rm = accessibleRMs.find(r => r.name === currentRM);
+    if (rm && rm.cluster){
+      selectedCluster = rm.cluster;
+      const clSel = $('cluster-select');
+      if (clSel){
+        const opt = Array.from(clSel.options).find(o => o.value === rm.cluster);
+        if (opt) clSel.value = rm.cluster;
+      }
+    }
+  }
+  refreshUserLabel();
+  loadDashboard();
 }
 
 function doLogout(){
@@ -788,6 +1048,7 @@ function switchTab(tab){
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   $('panel-' + tab).classList.add('active');
   if (tab === 'summary') loadSummary();
+  if (tab === 'overview') loadOverview();
 }
 function showSummaryView(){ switchTab('summary'); }
 
@@ -845,29 +1106,93 @@ function syncRangeInputs(){
 }
 
 function renderRangeStatus(){
-  const bar = $('range-bar');
+  const summaryBtn = $('range-summary-btn');
+  const summaryLbl = $('range-summary-label');
   const status = $('range-status');
   if (!currentRange || !currentMonth){
-    if (bar) bar.classList.remove('multi-month');
+    if (summaryLbl) summaryLbl.textContent = '—';
     if (status) status.textContent = '';
+    if (summaryBtn) summaryBtn.classList.remove('customized');
     return;
   }
   const spans = rangeSpansMonths(currentRange);
   const days = rangeDayCount(currentRange);
   const isFullMonth = rangeMatchesMonth(currentRange, currentMonth);
 
-  if (bar) bar.classList.toggle('multi-month', spans);
-
-  let msg;
+  // Summary button label (compact)
+  let compactMsg;
   if (isFullMonth){
-    msg = 'Full month · ' + days + ' days';
+    compactMsg = 'Full month · ' + days + 'd';
   } else if (spans){
-    msg = '⚠ Spans ' + countMonthsInRange(currentRange) + ' months · ' + days + ' days';
+    compactMsg = '⚠ ' + countMonthsInRange(currentRange) + ' months · ' + days + 'd';
   } else {
-    msg = formatDatePretty(currentRange.from) + ' – ' + formatDatePretty(currentRange.to) +
-          ' · ' + days + ' days';
+    compactMsg = formatDatePretty(currentRange.from) + ' → ' +
+                 formatDatePretty(currentRange.to) + ' · ' + days + 'd';
   }
-  if (status) status.textContent = msg;
+  if (summaryLbl) summaryLbl.textContent = compactMsg;
+  if (summaryBtn) summaryBtn.classList.toggle('customized', !isFullMonth);
+
+  // Expanded editor status line (full text)
+  let fullMsg;
+  if (isFullMonth){
+    fullMsg = 'Full month · ' + days + ' days';
+  } else if (spans){
+    fullMsg = '⚠ Spans ' + countMonthsInRange(currentRange) + ' months · ' + days + ' days';
+  } else {
+    fullMsg = formatDatePretty(currentRange.from) + ' – ' + formatDatePretty(currentRange.to) +
+              ' · ' + days + ' days';
+  }
+  if (status) status.textContent = fullMsg;
+}
+
+/**
+ * Expand/collapse the report-range editor when user clicks the summary pill.
+ */
+function toggleRangeExpand(){
+  const editor = $('range-editor');
+  const btn    = $('range-summary-btn');
+  if (!editor) return;
+  const willOpen = editor.style.display === 'none' || !editor.style.display;
+  editor.style.display = willOpen ? 'flex' : 'none';
+  if (btn) btn.classList.toggle('open', willOpen);
+}
+
+/**
+ * Manual refresh: reloads the dashboard + shows spinner feedback.
+ * Bypasses the auto-refresh throttle so the user always gets fresh data.
+ */
+function manualRefresh(){
+  const btn = $('manual-refresh-btn');
+  if (btn){
+    btn.classList.add('spinning');
+    btn.disabled = true;
+  }
+  // Clear any cached overview so it re-fetches on next tab switch
+  if (typeof overviewCache !== 'undefined') overviewCache = null;
+
+  const done = () => {
+    if (btn){ btn.classList.remove('spinning'); btn.disabled = false; }
+  };
+
+  // Tell user we're working
+  const status = $('refresh-status');
+  if (status) status.textContent = 'Refreshing…';
+
+  try {
+    loadDashboard();
+    // If overview tab is active, reload it too
+    if ($('panel-overview') && $('panel-overview').classList.contains('active')){
+      if (typeof loadOverview === 'function') loadOverview();
+    }
+    if ($('panel-summary') && $('panel-summary').classList.contains('active')){
+      if (typeof loadSummary === 'function') loadSummary();
+    }
+    // Short guaranteed delay for the spinner so the click feels responsive
+    setTimeout(done, 500);
+  } catch (e){
+    done();
+    showToast('Refresh failed: ' + e.message, 'error');
+  }
 }
 
 function countMonthsInRange(r){
@@ -890,23 +1215,9 @@ function hasUnsavedDraft(){
   return Object.keys(draftGrid).some(s => Object.keys(draftGrid[s] || {}).length > 0);
 }
 
-/* ============ BASE STORE & TRAVEL MODE ============ */
+/* ============ SETTINGS BAR (mode toggle only — Base Store now lives at bottom of Visit Plan) ============ */
 function renderBaseStoreBar(data){
   if (!isRM()) return;
-  const sel = $('base-store-select');
-  sel.innerHTML = '<option value="">-- Select Base Store --</option>' +
-    data.stores.map(s => '<option value="' + escapeHtml(s.storeName) + '"' +
-      (data.baseStore === s.storeName ? ' selected' : '') + '>' +
-      escapeHtml(s.storeName) + '</option>').join('');
-  const bar = $('settings-bar');
-  if (data.baseStore){
-    bar.classList.add('configured');
-    $('base-status').textContent = '✓ Travel starts from this store each day';
-  } else {
-    bar.classList.remove('configured');
-    $('base-status').textContent = '⚠ Set your base store to enable travel calculation';
-  }
-
   // Highlight the active travel mode button
   const rates = data.availableRates || (data.travel && data.travel.availableRates) || { Car: 12, Bike: 7 };
   const currentMode = (data.travel && data.travel.defaultMode) || data.travelMode || 'Car';
@@ -1005,7 +1316,7 @@ function loadDashboard(silent){
       renderComparison(data);
       renderTravel(data);
       renderAudit(data);
-      $('refresh-status').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      $('refresh-status').textContent = 'Synced ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     })
     .withFailureHandler(err => {
       $('refresh-status').textContent = 'Error';
@@ -1019,12 +1330,13 @@ function renderVisitPlan(data){
   const c = $('visit-plan-container');
   const kpi = data.planKPI;
   // Non-RM actors never edit, so effectively locked
-  // Lock the plan UI when: the plan is already Locked, OR the caller isn't an RM,
-  // OR an RM is viewing someone else (a CM's data, for instance).
-  const viewingSelf = isRM() && currentRM &&
+  // Editable only when: viewing self, plan not locked, and user is RM or CM.
+  // Admin viewing is always read-only here (Admin uses the override tool in Phase 5).
+  const viewingSelf = (isRM() || isCM()) && currentRM &&
                       String(currentRM).trim().toLowerCase() ===
                       String(actor.name).trim().toLowerCase();
-  const effectivelyLocked = data.plan.locked || !isRM() || !viewingSelf;
+  const canEditPlan = (isRM() || isCM()) && viewingSelf;
+  const effectivelyLocked = data.plan.locked || !canEditPlan;
   const cmsLabel = data.uniqueCMs.length ? data.uniqueCMs.join(', ') : '—';
 
   let html = '';
@@ -1087,8 +1399,21 @@ function renderVisitPlan(data){
   html += '</tbody></table></div>';
 
   html += '<div class="vp-submit-bar">';
-  if (!isRM()){
-    html += '<span class="locked-indicator">👁️ View-only — only the RM can edit.</span>';
+  if (isAdmin()){
+    // Admin gets a view-only indicator + a reset button for any locked/submitted plan
+    if (data.plan.locked){
+      html += '<span class="locked-indicator">🔒 Plan locked on ' +
+              (data.plan.submittedOn || '—') + '</span>';
+    } else {
+      html += '<span class="locked-indicator" style="background:#e6f4ea;color:#137333">📝 Plan is in Draft</span>';
+    }
+    html += '<button class="btn-danger" id="admin-reset-btn" onclick="adminResetPlanUI()" ' +
+            'title="Unlock this plan so the user can edit it again">🔓 Reset / Unlock Plan</button>';
+  } else if (!isRM() && !isCM()){
+    html += '<span class="locked-indicator">👁️ View-only.</span>';
+  } else if (!canEditPlan){
+    // RM/CM viewing someone else
+    html += '<span class="locked-indicator">👁️ View-only — you are viewing another user.</span>';
   } else if (data.plan.locked){
     html += '<span class="locked-indicator">🔒 Plan locked on ' +
             (data.plan.submittedOn || '—') + '</span>';
@@ -1100,6 +1425,34 @@ function renderVisitPlan(data){
   }
   html += '</div>';
 
+  // ------- Base Store selector (bottom of Visit Plan, RM/CM only, edit own data) -------
+  if (canEditPlan){
+    html += '<div class="base-store-footer">';
+    html += '<div class="base-store-header">🏠 Base Store</div>';
+    html += '<div class="base-store-body">';
+    html += '<select id="base-store-select" class="base-store-select">';
+    html += '<option value="">-- Select Base Store --</option>';
+    const storesList = data.stores || [];
+    storesList.forEach(s => {
+      const sel = (data.baseStore === s.storeName) ? ' selected' : '';
+      html += '<option value="' + escapeHtml(s.storeName) + '"' + sel + '>' +
+              escapeHtml(s.storeName) + '</option>';
+    });
+    html += '</select>';
+    html += '<button class="btn-primary" onclick="saveBaseStore()" id="save-base-btn">Save</button>';
+    const statusMsg = data.baseStore
+      ? '✓ Travel calculated starting from <b>' + escapeHtml(data.baseStore) + '</b> each day'
+      : '⚠ Set your base store to enable travel calculation';
+    html += '<span class="base-store-status">' + statusMsg + '</span>';
+    html += '</div></div>';
+  } else if (data.baseStore){
+    // Non-editors see it as read-only info
+    html += '<div class="base-store-footer readonly">';
+    html += '<div class="base-store-header">🏠 Base Store</div>';
+    html += '<div class="base-store-body"><span>' + escapeHtml(data.baseStore) + '</span></div>';
+    html += '</div>';
+  }
+
   c.innerHTML = html;
 }
 
@@ -1109,15 +1462,56 @@ function kpiCard(cls, label, value){
 }
 
 function storeRowHtml(storeName, cmName, data, locked, isAdditional){
-  let html = '<tr' + (isAdditional ? ' class="additional-row"' : '') + '>';
+  // Look up this store in the enriched list to find its mapped/days info
+  const info = (data.stores || []).find(s => s.storeName === storeName);
+  const isSwipeOnly = !isAdditional && info && info.mapped === false;
+
+  let rowCls = '';
+  if (isAdditional)   rowCls = ' class="additional-row"';
+  else if (isSwipeOnly) rowCls = ' class="swipe-only-row"';
+
+  let html = '<tr' + rowCls + '>';
   const baseFlag = (storeName === data.baseStore) ? ' 🏠' : '';
-  html += '<td class="sticky-col store-cell">' + escapeHtml(storeName) + baseFlag + '</td>';
+
+  // Days Since Last Visit badge — only for MAPPED stores.
+  // Swipe-only rows (Azra's Kathriguppe case) skip the badge.
+  let daysLine = '';
+  if (!isAdditional && info && info.mapped !== false){
+    daysLine = daysSinceHtml(info.daysSinceLastVisit, info.lastVisitDate);
+  }
+
+  let nameLine = escapeHtml(storeName) + baseFlag;
+  if (isSwipeOnly){
+    nameLine += ' <span class="unmapped-flag" title="Not in your Store Mapping — appears here because you swiped at it">unmapped</span>';
+  }
+
+  html += '<td class="sticky-col store-cell">' +
+            '<div class="store-name-line">' + nameLine + '</div>' +
+            (daysLine ? '<div class="store-days-line">' + daysLine + '</div>' : '') +
+          '</td>';
   html += '<td class="sticky-col col2 cm-cell">' + escapeHtml(cmName || '—') + '</td>';
   data.dayMeta.forEach(dm => {
     html += dayCellHtml(storeName, dm, data, locked, isAdditional);
   });
   html += '</tr>';
   return html;
+}
+
+/**
+ * Builds the "Days Since Last Visit" badge shown under each store name.
+ * Colour buckets: 0–7 green, 8–14 grey, 15–30 amber, >30 red, null → red "Never".
+ */
+function daysSinceHtml(days, lastDate){
+  if (days == null){
+    return '<span class="days-badge never" title="No prior swipe found">⏱ Never visited</span>';
+  }
+  let cls = 'fresh';
+  if (days > 30)       cls = 'stale';
+  else if (days > 14)  cls = 'aging';
+  else if (days > 7)   cls = 'normal';
+  const label = days === 0 ? 'Today' : (days === 1 ? '1 day ago' : days + ' days ago');
+  const title = lastDate ? ('Last visit: ' + lastDate) : '';
+  return '<span class="days-badge ' + cls + '" title="' + title + '">⏱ ' + label + '</span>';
 }
 
 function additionalRowHtml(idx, chosenStore, data, locked){
@@ -1608,6 +2002,193 @@ function renderSummary(s){
   content.innerHTML = html;
 }
 
+/* ============ OVERVIEW TAB ============ */
+let overviewCache = null;   // cached response to power the popup without re-fetch
+
+/**
+ * Loads the Overview data for the currently viewed user + current FY.
+ * Called automatically when the Overview tab is activated.
+ */
+function loadOverview(){
+  const c = $('overview-content');
+  if (!currentRM){
+    c.innerHTML = '<div class="empty">Select a user.</div>';
+    return;
+  }
+  c.innerHTML = '<div class="empty"><span class="spinner"></span>Loading overview…</div>';
+  const fyStart = currentFYStart();
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res && res.error){
+        c.innerHTML = '<div class="empty" style="color:var(--danger)">' + escapeHtml(res.error) + '</div>';
+        return;
+      }
+      overviewCache = res;
+      renderOverview(res);
+    })
+    .withFailureHandler(err => {
+      c.innerHTML = '<div class="empty" style="color:var(--danger)">Error: ' +
+                    escapeHtml(err.message) + '</div>';
+    })
+    .getOverviewData(caller(), currentRM, fyStart);
+}
+
+function renderOverview(data){
+  const c = $('overview-content');
+  if (!data || !data.rows){
+    c.innerHTML = '<div class="empty">No data.</div>';
+    return;
+  }
+  $('overview-heading').textContent = 'Overview · ' + data.viewedUser + ' · ' + data.fyLabel;
+
+  // Build FY month list for the column headers
+  const fyStart = data.fyStart;
+  const monthOrder = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+  const monthCols = monthOrder.map(m => {
+    const year = m >= 4 ? fyStart : fyStart + 1;
+    return {
+      key: year + '-' + String(m).padStart(2, '0'),
+      label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]
+    };
+  });
+
+  // KPI cards
+  let html = '<div class="ov-kpi-row">';
+  html += ovKpi('Total Visits', data.kpi.totalVisits != null ? data.kpi.totalVisits : data.kpi.totalSwipes);
+  html += ovKpi('Stores Visited', data.kpi.distinctVisited);
+  html += ovKpi('Mapped Stores', data.kpi.mappedStores);
+  html += ovKpi('Never Visited', data.kpi.neverVisited,
+                data.kpi.neverVisited > 0 ? 'warn' : '');
+  html += '</div>';
+
+  html += '<div style="margin:14px 0 8px;font-size:12px;color:var(--muted)">' +
+          '💡 <b>Tip:</b> Click any store row to see its month-wise visit breakdown.</div>';
+
+  // Store table
+  html += '<div class="ov-table-wrap"><table class="ov-table"><thead><tr>';
+  html += '<th class="sticky-col">Store Name</th>';
+  html += '<th>Mapped?</th>';
+  html += '<th class="num">Total Visits</th>';
+  html += '<th>Last Visit</th>';
+  html += '</tr></thead><tbody>';
+  data.rows.forEach((r, idx) => {
+    const cls = !r.mapped ? ' class="unmapped-row"'
+              : (r.totalVisits === 0 ? ' class="never-visited-row"' : '');
+    html += '<tr' + cls +
+            ' onclick="showStoreMonthlyPopup(' + idx + ')" style="cursor:pointer">';
+    html += '<td class="sticky-col store-link">' + escapeHtml(r.storeName) +
+            (r.mapped ? '' : ' <span class="unmapped-flag">unmapped</span>') + '</td>';
+    html += '<td>' + (r.mapped ? '<span style="color:#137333">✓</span>' :
+                                  '<span style="color:var(--muted)">—</span>') + '</td>';
+    html += '<td class="num"><b>' + r.totalVisits + '</b></td>';
+    html += '<td>' + (r.lastVisitDate || '<span style="color:var(--muted)">Never</span>') + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  c.innerHTML = html;
+}
+
+function ovKpi(label, value, mod){
+  return '<div class="ov-kpi' + (mod ? ' ' + mod : '') + '">' +
+         '<div class="ov-kpi-label">' + label + '</div>' +
+         '<div class="ov-kpi-value">' + value + '</div></div>';
+}
+
+/**
+ * Opens the month-wise breakdown popup for a clicked store (by row index
+ * in the cached overview response).
+ */
+function showStoreMonthlyPopup(rowIdx){
+  if (!overviewCache || !overviewCache.rows) return;
+  const row = overviewCache.rows[rowIdx];
+  if (!row) return;
+
+  const fyStart = overviewCache.fyStart;
+  const monthOrder = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+  const maxCount = Math.max(1, ...monthOrder.map(m => {
+    const yr = m >= 4 ? fyStart : fyStart + 1;
+    return row.byMonth[yr + '-' + String(m).padStart(2, '0')] || 0;
+  }));
+
+  let body = '<div class="ov-popup-total">' +
+             'Total visits in ' + overviewCache.fyLabel + ': <b>' + row.totalVisits + '</b></div>';
+  body += '<table class="ov-popup-table"><thead><tr><th>Month</th><th class="num">Visits</th><th>Distribution</th></tr></thead><tbody>';
+  monthOrder.forEach(m => {
+    const yr = m >= 4 ? fyStart : fyStart + 1;
+    const key = yr + '-' + String(m).padStart(2, '0');
+    const count = row.byMonth[key] || 0;
+    const barW = count ? Math.round((count / maxCount) * 100) : 0;
+    const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
+    body += '<tr' + (count === 0 ? ' class="zero"' : '') + '>';
+    body += '<td>' + monthName + ' ' + String(yr).slice(-2) + '</td>';
+    body += '<td class="num">' + count + '</td>';
+    body += '<td><div class="ov-popup-bar-bg"><div class="ov-popup-bar" style="width:' + barW + '%"></div></div></td>';
+    body += '</tr>';
+  });
+  body += '</tbody></table>';
+
+  showModal(row.storeName + (row.mapped ? '' : ' (unmapped)'), body);
+}
+
+/* ============ GENERIC MODAL ============ */
+function showModal(title, bodyHtml){
+  let modal = $('app-modal');
+  if (!modal){
+    modal = document.createElement('div');
+    modal.id = 'app-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML =
+      '<div class="modal-dialog">' +
+        '<div class="modal-head"><h3 id="modal-title"></h3>' +
+          '<button class="modal-close" onclick="closeModal()">×</button></div>' +
+        '<div class="modal-body" id="modal-body"></div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => {
+      if (e.target === modal) closeModal();
+    });
+  }
+  $('modal-title').textContent = title;
+  $('modal-body').innerHTML = bodyHtml;
+  modal.classList.add('open');
+}
+function closeModal(){
+  const m = $('app-modal');
+  if (m) m.classList.remove('open');
+}
+
+/* ============ ADMIN RESET ============ */
+/**
+ * Admin-only: unlocks the currently viewed user's plan for the selected month.
+ * Preserves all data (entries stay as Draft, user can edit from where they left off).
+ */
+function adminResetPlanUI(){
+  if (!isAdmin()){ showToast('Admin only.', 'error'); return; }
+  if (!currentRM || !currentMonth){ showToast('Pick a user and month first.', 'error'); return; }
+  const msg = 'Unlock ' + currentRM + '\'s plan for ' + currentMonth + '?\n\n' +
+              'The existing entries stay intact but the user will be able to edit them again.';
+  if (!confirm(msg)) return;
+
+  const btn = $('admin-reset-btn');
+  if (btn){ btn.disabled = true; btn.textContent = 'Resetting…'; }
+  google.script.run
+    .withSuccessHandler(res => {
+      if (btn){ btn.disabled = false; btn.textContent = '🔓 Reset / Unlock Plan'; }
+      if (res.success){
+        showToast(res.message, 'success');
+        loadDashboard();
+      } else {
+        showToast(res.message, 'error');
+      }
+    })
+    .withFailureHandler(err => {
+      if (btn){ btn.disabled = false; btn.textContent = '🔓 Reset / Unlock Plan'; }
+      showToast('Error: ' + err.message, 'error');
+    })
+    .adminResetPlan(caller(), currentRM, currentMonth);
+}
+
 function jumpToRM(rmName){
   currentRM = rmName;
   // Ensure cluster dropdown reflects if needed
@@ -1623,10 +2204,33 @@ function jumpToRM(rmName){
 }
 
 /* ============ INIT ============ */
-// On page load, fill the login Name dropdown and set up Enter-key submit
-document.addEventListener('DOMContentLoaded', () => {
-  populateLoginNames();
-  const designation = $('login-designation');
+/**
+ * Waits until google.script.run is available, then runs the callback.
+ * Apps Script's bridge object can finish loading slightly AFTER DOMContentLoaded,
+ * which caused "google is not defined" errors on some browsers. This poll is
+ * ~instant on a good connection and gives up after ~5 seconds.
+ */
+function whenGoogleReady(cb, tries){
+  tries = tries || 0;
+  if (typeof google !== 'undefined' && google.script && google.script.run){
+    cb();
+    return;
+  }
+  if (tries > 50){
+    console.error('google.script.run never became available');
+    const sel = document.getElementById('login-name');
+    if (sel) sel.innerHTML = '<option value="">-- Error: could not reach server --</option>';
+    return;
+  }
+  setTimeout(() => whenGoogleReady(cb, tries + 1), 100);
+}
+
+// Run on load (not DOMContentLoaded) so Apps Script has a chance to inject its bridge.
+window.addEventListener('load', () => {
+  whenGoogleReady(() => {
+    populateLoginNames();
+  });
+  const designation = document.getElementById('login-designation');
   if (designation) designation.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 });
 </script>
