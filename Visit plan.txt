@@ -134,8 +134,39 @@ function doGet(e) {
 }
 
 // ======= UTILITIES =======
-function _ss()        { return SpreadsheetApp.openById(SHEET_ID); }
-function _sheet(name) { return _ss().getSheetByName(name); }
+/**
+ * Per-execution cache. Apps Script globals live for exactly one request, so
+ * nothing here can survive into a later request — a page load always sees
+ * fresh data, it just stops re-reading the same sheet a dozen times.
+ *
+ * Previously _ss() called openById() on EVERY _sheet() call (dozens per
+ * request), and each reader re-ran getDataRange() on the same sheet.
+ */
+let _MEMO = { ss: null, sheets: {}, values: {} };
+
+function _ss() {
+  if (!_MEMO.ss) _MEMO.ss = SpreadsheetApp.openById(SHEET_ID);
+  return _MEMO.ss;
+}
+function _sheet(name) {
+  if (!(name in _MEMO.sheets)) _MEMO.sheets[name] = _ss().getSheetByName(name);
+  return _MEMO.sheets[name];
+}
+/**
+ * Whole-sheet values, read at most once per execution. Returns [] when the
+ * sheet is missing so callers can drop their own existence guards.
+ *
+ * Read paths only. Functions that WRITE (setBaseStore, setDailyMode,
+ * adminResetPlan, deleteVisitPlan …) deliberately keep their own
+ * getDataRange() call, so they always see post-write row positions.
+ */
+function _values(name) {
+  if (!(name in _MEMO.values)) {
+    const sh = _sheet(name);
+    _MEMO.values[name] = (sh && sh.getLastRow() >= 1) ? sh.getDataRange().getValues() : [];
+  }
+  return _MEMO.values[name];
+}
 function _norm(v)     { return String(v || '').trim().toLowerCase(); }
 function _fmtDate(d) {
   const dt = (d instanceof Date) ? d : new Date(d);
@@ -295,11 +326,10 @@ function getDistance(lat1, lon1, lat2, lon2) {
  * Both directions (A→B and B→A) are stored so the caller doesn't need to sort.
  */
 function _loadDistanceMatrix() {
-  const sh = _sheet(SHEETS.DISTANCE_CALC);
   const out = { matrix: {}, available: false };
-  if (!sh || sh.getLastRow() < 5) return out;
+  const data = _values(SHEETS.DISTANCE_CALC);
+  if (data.length < 5) return out;
 
-  const data = sh.getDataRange().getValues();
   // Find the header row: the row whose first cell is "Store Name"
   let headerRow = -1;
   for (let i = 0; i < Math.min(data.length, 10); i++) {
@@ -390,9 +420,7 @@ function initializeSheets() {
  * Returns { role, cluster, canonicalName } if credentials match, else null.
  */
 function _lookupUser(name) {
-  const sh = _sheet(SHEETS.USERS);
-  if (!sh || sh.getLastRow() < 2) return null;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.USERS);
   const target = _norm(name);
   for (let i = 1; i < data.length; i++) {
     if (_norm(data[i][0]) !== target) continue;
@@ -449,9 +477,7 @@ function login(nameOrPayload) {
  * No authentication required — this is pre-login.
  */
 function listLoginNames() {
-  const sh = _sheet(SHEETS.USERS);
-  if (!sh || sh.getLastRow() < 2) return [];
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.USERS);
   const out = [];
   for (let i = 1; i < data.length; i++) {
     const name = String(data[i][0] || '').trim();
@@ -534,9 +560,8 @@ function _accessibleRMs(user) {
 function _accessibleCMs(user) {
   const allCMNames = new Set();      // lowercase for lookup
   const cmDirectory = {};            // lc → { name, cluster }
-  const sh = _sheet(SHEETS.USERS);
-  if (sh && sh.getLastRow() >= 2) {
-    const data = sh.getDataRange().getValues();
+  {
+    const data = _values(SHEETS.USERS);
     for (let i = 1; i < data.length; i++) {
       const role = _canonicalRole(data[i][1] || '');
       if (role !== ROLES.CM) continue;
@@ -557,9 +582,7 @@ function _accessibleCMs(user) {
   if (user.role !== ROLES.RM) return [];
 
   // RM: scan Store Mapping for rows where RM Name = this user; collect distinct CM Names.
-  const storeSh = _sheet(SHEETS.STORE_MAPPING);
-  if (!storeSh || storeSh.getLastRow() < 2) return [];
-  const sd = storeSh.getDataRange().getValues();
+  const sd = _values(SHEETS.STORE_MAPPING);
   const cmsFound = new Set();
   for (let i = 1; i < sd.length; i++) {
     if (_norm(sd[i][1]) !== _norm(user.canonicalName)) continue;   // col B = RM Name
@@ -592,9 +615,8 @@ function _accessibleClusters(user) {
     // more complete since every store row has a cluster).
     const set = new Set();
     _listAllRMs().forEach(r => { if (r.cluster) set.add(r.cluster); });
-    const storeSh = _sheet(SHEETS.STORE_MAPPING);
-    if (storeSh && storeSh.getLastRow() >= 2) {
-      const sd = storeSh.getDataRange().getValues();
+    {
+      const sd = _values(SHEETS.STORE_MAPPING);
       for (let i = 1; i < sd.length; i++) {
         const cl = String(sd[i][3] || '').trim();    // col D = Cluster
         if (cl) set.add(cl);
@@ -613,9 +635,8 @@ function _accessibleClusters(user) {
 function _listAllRMs() {
   const result = [];
   const seen = new Set();
-  const usersSh = _sheet(SHEETS.USERS);
-  if (usersSh && usersSh.getLastRow() >= 2) {
-    const data = usersSh.getDataRange().getValues();
+  {
+    const data = _values(SHEETS.USERS);
     for (let i = 1; i < data.length; i++) {
       const role = _canonicalRole(data[i][1]);
       if (role === ROLES.RM) {
@@ -637,10 +658,8 @@ function _listAllRMs() {
 }
 
 function _buildRMClusterFromMapping() {
-  const sh = _sheet(SHEETS.STORE_MAPPING);
   const map = {};
-  if (!sh || sh.getLastRow() < 2) return map;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.STORE_MAPPING);
   for (let i = 1; i < data.length; i++) {
     const rm = _norm(data[i][1]);
     const cl = String(data[i][3] || '').trim();
@@ -665,34 +684,29 @@ function _buildRMClusterFromMapping() {
  * Unmapped rows have those fields blank (they'll display as "—").
  */
 function getStoresForRM(userName) {
-  const sh = _sheet(SHEETS.STORE_MAPPING);
   const target = _norm(userName);
 
   // Step 1 — formally mapped rows (as RM or CM)
   const rmList = [];
   const cmList = [];
-  if (sh && sh.getLastRow() >= 2) {
-    const data = sh.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      const row = {
-        storeName: String(data[i][0]).trim(),
-        cmName   : String(data[i][2] || '').trim(),
-        cluster  : String(data[i][3] || '').trim(),
-        mapped   : true
-      };
-      if (!row.storeName) continue;
-      if (_norm(data[i][1]) === target) rmList.push(row);
-      if (_norm(data[i][2]) === target) cmList.push(row);
-    }
+  const data = _values(SHEETS.STORE_MAPPING);
+  for (let i = 1; i < data.length; i++) {
+    const row = {
+      storeName: String(data[i][0]).trim(),
+      cmName   : String(data[i][2] || '').trim(),
+      cluster  : String(data[i][3] || '').trim(),
+      mapped   : true
+    };
+    if (!row.storeName) continue;
+    if (_norm(data[i][1]) === target) rmList.push(row);
+    if (_norm(data[i][2]) === target) cmList.push(row);
   }
   // Prefer RM match if it has any rows, else fall back to CM match.
   const baseList = rmList.length ? rmList : cmList;
   const seenKeys = new Set(baseList.map(s => _storeKey(s.storeName)));
 
   // Step 2 — walk Login Logout for any store not already in the base list
-  const swipeSh = _sheet(SHEETS.LOGIN_LOGOUT);
-  if (!swipeSh || swipeSh.getLastRow() < 2) return baseList;
-  const sd = swipeSh.getDataRange().getValues();
+  const sd = _values(SHEETS.LOGIN_LOGOUT);
   const swipeOnly = {}; // key → displayName
   for (let i = 1; i < sd.length; i++) {
     if (_norm(sd[i][LC.EMP_NAME]) !== target) continue;
@@ -729,9 +743,7 @@ function getStoresForRM(userName) {
  */
 function _getLastVisitDates(userName) {
   const out = {};
-  const sh = _sheet(SHEETS.LOGIN_LOGOUT);
-  if (!sh || sh.getLastRow() < 2) return out;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.LOGIN_LOGOUT);
   const target = _norm(userName);
 
   for (let i = 1; i < data.length; i++) {
@@ -757,10 +769,8 @@ function _getLastVisitDates(userName) {
  * Each entry: { displayName, lat, lon, type }
  */
 function _buildStoreMasterMap() {
-  const sh = _sheet(SHEETS.STORE_MASTER);
   const map = {};
-  if (!sh || sh.getLastRow() < 2) return map;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.STORE_MASTER);
   for (let i = 1; i < data.length; i++) {
     const name = String(data[i][0] || '').trim();
     if (!name) continue;
@@ -821,9 +831,7 @@ function _distanceBetweenStores(storeA, storeB, masterMap, distMatrix) {
 
 // ======= RM MASTER =======
 function getBaseStore(rmName) {
-  const sh = _sheet(SHEETS.RM_MASTER);
-  if (!sh || sh.getLastRow() < 2) return '';
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.RM_MASTER);
   const target = _norm(rmName);
   for (let i = 1; i < data.length; i++) {
     if (_norm(data[i][0]) === target) return String(data[i][1] || '').trim();
@@ -842,9 +850,7 @@ function getTravelMode(userName) {
   const userRec = _lookupUser(userName);
   if (userRec && userRec.role === ROLES.CM) return 'Bike';
 
-  const sh = _sheet(SHEETS.RM_MASTER);
-  if (!sh || sh.getLastRow() < 2) return DEFAULT_TRAVEL_MODE;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.RM_MASTER);
   const target = _norm(userName);
   for (let i = 1; i < data.length; i++) {
     if (_norm(data[i][0]) === target) {
@@ -926,12 +932,10 @@ function setTravelMode(caller, rmName, mode) {
  * Returns: { 'YYYY-MM-DD': 'Car' | 'Bike' }
  */
 function _loadDailyModes(rmName, monthOrRange) {
-  const sh = _sheet(SHEETS.DAILY_MODE);
   const map = {};
-  if (!sh || sh.getLastRow() < 2) return map;
   const range = _normalizeRange(monthOrRange);
   if (!range) return map;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.DAILY_MODE);
   const target = _norm(rmName);
   for (let i = 1; i < data.length; i++) {
     if (_norm(data[i][0]) !== target) continue;
@@ -1002,10 +1006,8 @@ function isPlanLocked(rmName, month) {
 }
 
 function getVisitPlan(rmName, month) {
-  const sh = _sheet(SHEETS.VISIT_PLAN);
   const out = { locked: false, grid: {}, additional: [], submittedOn: null };
-  if (!sh || sh.getLastRow() < 2) return out;
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.VISIT_PLAN);
   const target = _norm(rmName);
   const addSet = new Set();
   for (let i = 1; i < data.length; i++) {
@@ -1223,9 +1225,7 @@ function _getVisitEvents(rmName, monthOrRange) {
   const target = _norm(rmName);
   const range = _normalizeRange(monthOrRange);
   if (!range) return [];
-  const loginSh = _sheet(SHEETS.LOGIN_LOGOUT);
-  if (!loginSh || loginSh.getLastRow() < 2) return [];
-  const data = loginSh.getDataRange().getValues();
+  const data = _values(SHEETS.LOGIN_LOGOUT);
   const groups = {};
   for (let i = 1; i < data.length; i++) {
     if (_norm(data[i][LC.EMP_NAME]) !== target) continue;
@@ -1283,10 +1283,9 @@ function getPlannedVsActual(rmName, monthOrRange) {
 
   // Planned rows within the range. Filter by Planned Date (col D) so the
   // function works identically for single-month and multi-month ranges.
-  const planSh = _sheet(SHEETS.VISIT_PLAN);
-  if (planSh && planSh.getLastRow() >= 2) {
+  {
     const monthSet = new Set(range.months);
-    const pd = planSh.getDataRange().getValues();
+    const pd = _values(SHEETS.VISIT_PLAN);
     for (let i = 1; i < pd.length; i++) {
       if (_norm(pd[i][0]) !== target) continue;
       // Fast filter: skip rows whose Month column doesn't overlap the range at all
@@ -1453,13 +1452,11 @@ function _makeIssueKey(rmName, month, date, issueType, storeName) {
  * Returns: { issueKey: { status, reviewer, reviewedOn, notes } }
  */
 function _loadAuditReviews(rmName, monthOrRange) {
-  const sh = _sheet(SHEETS.AUDIT_REVIEWS);
   const map = {};
-  if (!sh || sh.getLastRow() < 2) return map;
   const range = _normalizeRange(monthOrRange);
   if (!range) return map;
   const monthSet = new Set(range.months);
-  const data = sh.getDataRange().getValues();
+  const data = _values(SHEETS.AUDIT_REVIEWS);
   for (let i = 1; i < data.length; i++) {
     if (_norm(data[i][1]) !== _norm(rmName)) continue;
     if (!monthSet.has(_monthStr(data[i][2]))) continue;
@@ -1684,10 +1681,9 @@ function reviewAuditIssue(caller, issueKey, decision, notes) {
 function getTopPerformer(monthOrRange, scopeRMs) {
   const range = _normalizeRange(monthOrRange);
   if (!range) return null;
-  const planSh = _sheet(SHEETS.VISIT_PLAN);
-  if (!planSh || planSh.getLastRow() < 2) return null;
   const monthSet = new Set(range.months);
-  const data = planSh.getDataRange().getValues();
+  const data = _values(SHEETS.VISIT_PLAN);
+  if (data.length < 2) return null;
   const rmSet = new Set();
   for (let i = 1; i < data.length; i++) {
     // Consider an RM as a candidate if any of their plan rows fall in the range
@@ -1819,10 +1815,9 @@ function getOverviewData(caller, viewedUser, fyStart) {
   // VISIT COUNTING RULE: one visit per store per calendar day — so multiple
   // login/logout swipes at the same store the same day count as 1. If the user
   // visits store A in the morning and store B in the afternoon, that's 2 visits.
-  const sh = _sheet(SHEETS.LOGIN_LOGOUT);
   const counts = {};       // storeKey → { display, daySet:Set<'YYYY-MM-DD'>, byMonth:{}, lastDate, mapped }
-  if (sh && sh.getLastRow() >= 2) {
-    const data = sh.getDataRange().getValues();
+  {
+    const data = _values(SHEETS.LOGIN_LOGOUT);
     const target = _norm(viewedUser);
     for (let i = 1; i < data.length; i++) {
       if (_norm(data[i][LC.EMP_NAME]) !== target) continue;
