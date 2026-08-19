@@ -255,6 +255,65 @@
   .day-cell.type-L{background:#fb8c00}
   .day-cell.type-WO{background:#616161}
   .day-cell.type-WOH{background:#9e9e9e;background-image:linear-gradient(135deg,#9e9e9e 50%,#cfcfcf 50%)}
+  /* ================= CALENDAR PLAN ENTRY =================
+     Replaces the stores x 31-days grid while a plan is editable. The grid
+     required scrolling in both directions to set a single day; this keeps the
+     month and the day editor on screen together. */
+  .pe{display:grid;grid-template-columns:1fr 370px;gap:14px;align-items:start;
+      padding:14px;background:var(--card)}
+  @media (max-width:900px){ .pe{grid-template-columns:1fr} }
+  .pe-card{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff}
+  .pe-card > h3{margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;
+      text-transform:uppercase;color:var(--muted);padding:10px 14px;
+      border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:10px}
+  .pe-card > h3 .hint{font-weight:500;letter-spacing:0;text-transform:none;font-size:11.5px}
+
+  .pe-cal{padding:10px 12px 14px}
+  .pe-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px}
+  .pe-dow span{text-align:center;font-size:10px;font-weight:700;letter-spacing:.05em;
+      text-transform:uppercase;color:var(--muted)}
+  .pe-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  .pe-day{aspect-ratio:1/1;border:1px solid var(--border);border-radius:7px;background:#fff;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+      cursor:pointer;font:inherit;color:inherit;padding:2px;transition:border-color .12s,background .12s}
+  .pe-day:hover{border-color:var(--primary);background:#e8f0fe}
+  .pe-day:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+  .pe-day.blank{border:none;background:transparent;cursor:default}
+  .pe-day .n{font-size:12.5px;font-weight:600}
+  .pe-day.we .n{color:var(--danger)}
+  .pe-day .dots{display:flex;gap:2px;min-height:5px}
+  .pe-day .dot{width:4px;height:4px;border-radius:50%;background:var(--primary)}
+  .pe-day.has{background:#e8f0fe;border-color:#9dbdf5}
+  .pe-day.sel{border-color:var(--primary);border-width:2px;background:#d2e3fc}
+  .pe-day.off{background:#eceff4}
+  .pe-day.off .n{color:var(--muted)}
+  .pe-day .tag{font-size:8.5px;font-weight:700;color:var(--muted)}
+
+  .pe-edit{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+  .pe-title{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .pe-title b{font-size:16px}
+  .pe-title span{font-size:12px;color:var(--muted)}
+  .pe-row{display:flex;gap:7px}
+  .pe-row select{flex:1;min-width:0}
+  .pe-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+  .pe-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;
+      background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:7px 9px}
+  .pe-list .pn{font-size:12px;font-weight:600;line-height:1.3}
+  .pe-list .pt{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
+  .pe-x{background:none;border:none;color:var(--muted);font-size:16px;line-height:1;
+      cursor:pointer;padding:2px 5px;border-radius:5px}
+  .pe-x:hover{background:#fce8e6;color:var(--danger)}
+  .pe-none{color:var(--muted);font-size:12px;padding:4px 0}
+  .pe-offs{display:flex;gap:5px;flex-wrap:wrap;padding-top:2px}
+  .pe-off{font:inherit;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;
+      border:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer}
+  .pe-off:hover{border-color:var(--primary);color:var(--primary)}
+  .pe-off.on{background:#eceff4;border-color:var(--muted);color:var(--text)}
+  .pe-counter{background:#fdf2f8;border:1px solid #f7c9e0;border-radius:7px;
+      padding:8px 10px;font-size:11.5px;color:#9d174d}
+  .pe-counter b{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+      margin-bottom:2px}
+
   /* ---- RM vs CM day-wise itinerary, inside the grid so days stay aligned ---- */
   .vp-grid tbody tr.itin-head td{
     background:#eef2ff;color:var(--navy);text-align:left;padding:7px 10px;
@@ -553,6 +612,7 @@ let refreshTimer = null;
 let isSubmitting = false;
 let draftGrid = {};
 let additionalStores = [];
+let selectedPlanDay = 1;   // which date the calendar editor is showing
 
 /* ============ RANGE HELPERS ============ */
 function daysInMonthYM(ym){
@@ -1416,6 +1476,16 @@ function renderVisitPlan(data){
     c.innerHTML = html; return;
   }
 
+  // Editable plans use the calendar; locked ones keep the wide grid, which is
+  // good for reading a whole month at once even though it was painful to edit.
+  if (!effectivelyLocked){
+    html += planCalendarHtml(data);
+    html += planSubmitBarHtml(data, canEditPlan, effectivelyLocked);
+    html += baseStoreFooterHtml(data, canEditPlan);
+    c.innerHTML = html;
+    return;
+  }
+
   html += '<div class="vp-grid-wrap"><table class="vp-grid"><thead><tr>';
   html += '<th class="sticky-col" style="min-width:170px;text-align:left;padding-left:10px">Store Name</th>';
   html += '<th class="sticky-col col2" style="min-width:120px;text-align:left;padding-left:10px">CM</th>';
@@ -1435,7 +1505,187 @@ function renderVisitPlan(data){
   html += itineraryRowsHtml(data);
   html += '</tbody></table></div>';
 
-  html += '<div class="vp-submit-bar">';
+  html += planSubmitBarHtml(data, canEditPlan, effectivelyLocked);
+  html += baseStoreFooterHtml(data, canEditPlan);
+  c.innerHTML = html;
+}
+
+/* ============ CALENDAR PLAN ENTRY ============
+ * draftGrid stays the single source of truth (store -> {day: type}) so
+ * submitPlan() is untouched. The calendar is just a different way to edit it.
+ *
+ * Off-days are recorded the way the old grid did it — one row against a single
+ * store — because that is what the Visit Plan sheet and the audit checks expect.
+ */
+const OFF_DAY_TYPES = { WO: 'Week Off', H: 'Holiday', L: 'Leave', OFC: 'Office' };
+
+function planDayMeta(data, day){
+  return (data.dayMeta || []).filter(dm => dm.day === day)[0] || null;
+}
+
+/** Visits planned on a day: [{ store, type }] — off-day markers excluded. */
+function planVisitsOn(day){
+  const out = [];
+  Object.keys(draftGrid).forEach(store => {
+    const vt = draftGrid[store][day];
+    if (!vt || OFF_DAY_TYPES[vt]) return;
+    out.push({ store: store, type: vt });
+  });
+  return out;
+}
+
+/** The off-day code set on a day, or '' if it is a working day. */
+function planOffOn(day){
+  let found = '';
+  Object.keys(draftGrid).some(store => {
+    const vt = draftGrid[store][day];
+    if (vt && OFF_DAY_TYPES[vt]){ found = vt; return true; }
+    return false;
+  });
+  return found;
+}
+
+function clearPlanDay(day){
+  Object.keys(draftGrid).forEach(store => { delete draftGrid[store][day]; });
+}
+
+function planCalendarHtml(data){
+  const days = data.dayMeta || [];
+  if (!days.length) return '<div class="empty">No days in this month.</div>';
+  if (!planDayMeta(data, selectedPlanDay)) selectedPlanDay = days[0].day;
+
+  // Monday-first calendar. dayMeta.weekday is Sun..Sat, so shift it.
+  const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const lead = order.indexOf(days[0].weekday);
+
+  let html = '<div class="pe">';
+
+  // ---- month ----
+  html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
+          '<span class="hint">click a date to plan it</span></h3><div class="pe-cal">';
+  html += '<div class="pe-dow">' + order.map(d => '<span>' + d + '</span>').join('') + '</div>';
+  html += '<div class="pe-grid">';
+  for (let b = 0; b < (lead < 0 ? 0 : lead); b++) html += '<div class="pe-day blank"></div>';
+  days.forEach(dm => {
+    const list = planVisitsOn(dm.day);
+    const off  = planOffOn(dm.day);
+    const cls = 'pe-day' + (dm.weekend ? ' we' : '') + (list.length ? ' has' : '') +
+                (off ? ' off' : '') + (dm.day === selectedPlanDay ? ' sel' : '');
+    let dots = '';
+    for (let i = 0; i < Math.min(list.length, 4); i++) dots += '<span class="dot"></span>';
+    html += '<button type="button" class="' + cls + '" onclick="selectPlanDay(' + dm.day + ')" ' +
+            'aria-label="' + dm.day + ' ' + escapeHtml(dm.weekday) + '">' +
+            '<span class="n">' + dm.day + '</span>' +
+            (off ? '<span class="tag">' + escapeHtml(off) + '</span>'
+                 : '<span class="dots">' + dots + '</span>') +
+            '</button>';
+  });
+  html += '</div></div></div>';
+
+  // ---- selected day ----
+  html += '<div class="pe-card"><h3>Selected day</h3><div class="pe-edit" id="pe-edit">' +
+          planDayEditorHtml(data) + '</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+function planDayEditorHtml(data){
+  const dm = planDayMeta(data, selectedPlanDay);
+  if (!dm) return '';
+  const list = planVisitsOn(selectedPlanDay);
+  const off  = planOffOn(selectedPlanDay);
+
+  let html = '<div class="pe-title"><b>' + escapeHtml(dm.weekday) + ' ' + dm.day + '</b>' +
+             '<span>' + (off ? escapeHtml(OFF_DAY_TYPES[off])
+                             : (list.length ? list.length + (list.length === 1 ? ' store' : ' stores')
+                                            : 'nothing planned')) + '</span></div>';
+
+  // store + visit type + add
+  const stores = (data.stores || []).filter(s => s.storeName);
+  if (stores.length){
+    html += '<div class="pe-row"><select id="pe-store">' +
+            stores.map(s => '<option value="' + escapeHtml(s.storeName) + '">' +
+                            escapeHtml(s.storeName) + '</option>').join('') +
+            '</select><select id="pe-type" style="max-width:130px">' +
+            Object.keys(data.visitTypes).filter(code => !OFF_DAY_TYPES[code] && data.visitTypes[code].isVisit)
+              .map(code => '<option value="' + code + '">' +
+                           escapeHtml(data.visitTypes[code].label) + '</option>').join('') +
+            '</select></div>';
+    html += '<button class="btn-primary" onclick="addPlanVisit()">Add to this day</button>';
+  }
+
+  if (list.length){
+    html += '<ul class="pe-list">' + list.map(p => {
+      const t = data.visitTypes[p.type];
+      return '<li><span><span class="pn">' + escapeHtml(p.store) + '</span>' +
+             '<span class="pt">' + escapeHtml(t ? t.label : p.type) + '</span></span>' +
+             '<button class="pe-x" title="Remove" onclick="removePlanVisit(\'' +
+             escapeHtml(p.store).replace(/'/g, "\\'") + '\')">&times;</button></li>';
+    }).join('') + '</ul>';
+  } else {
+    html += '<p class="pe-none">No stores added yet.</p>';
+  }
+
+  html += '<div class="pe-offs">' + Object.keys(OFF_DAY_TYPES).map(code =>
+    '<button type="button" class="pe-off' + (off === code ? ' on' : '') +
+    '" onclick="setPlanOffDay(\'' + code + '\')">' + escapeHtml(OFF_DAY_TYPES[code]) +
+    '</button>').join('') + '</div>';
+
+  // Where the counterpart is that day — the reason this sits beside the calendar.
+  const itin = data.itinerary;
+  if (itin && itin.rows && itin.rows.length > 1){
+    const others = itin.rows.filter(r => !r.self)
+      .map(r => {
+        const on = (r.days && r.days[selectedPlanDay]) || [];
+        return on.length ? escapeHtml(r.name) + ': ' + on.map(x => escapeHtml(x.store)).join(', ') : '';
+      }).filter(Boolean);
+    if (others.length){
+      html += '<div class="pe-counter"><b>Your ' + escapeHtml(itin.counterRole) +
+              ' this day</b>' + others.join('<br>') + '</div>';
+    }
+  }
+  return html;
+}
+
+function selectPlanDay(day){
+  selectedPlanDay = day;
+  renderVisitPlan(currentData);
+}
+
+function addPlanVisit(){
+  const store = $('pe-store') ? $('pe-store').value : '';
+  const type  = $('pe-type')  ? $('pe-type').value  : '';
+  if (!store || !type) return;
+  // Adding a visit clears any off-day marker on that date.
+  if (planOffOn(selectedPlanDay)) clearPlanDay(selectedPlanDay);
+  if (!draftGrid[store]) draftGrid[store] = {};
+  draftGrid[store][selectedPlanDay] = type;
+  renderVisitPlan(currentData);
+}
+
+function removePlanVisit(store){
+  if (draftGrid[store]) delete draftGrid[store][selectedPlanDay];
+  renderVisitPlan(currentData);
+}
+
+function setPlanOffDay(code){
+  const current = planOffOn(selectedPlanDay);
+  clearPlanDay(selectedPlanDay);
+  if (current !== code){
+    // Recorded against the first mapped store, matching how the old grid did it.
+    const first = (currentData.stores || [])[0];
+    if (first){
+      if (!draftGrid[first.storeName]) draftGrid[first.storeName] = {};
+      draftGrid[first.storeName][selectedPlanDay] = code;
+    }
+  }
+  renderVisitPlan(currentData);
+}
+
+/* Submit / lock / admin-reset bar. Shared by the calendar and the locked grid. */
+function planSubmitBarHtml(data, canEditPlan, effectivelyLocked){
+  let html = '<div class="vp-submit-bar">';
   if (isAdmin()){
     // Admin gets a view-only indicator + a reset button for any locked/submitted plan
     if (data.plan.locked){
@@ -1456,13 +1706,32 @@ function renderVisitPlan(data){
             (data.plan.submittedOn || '—') + '</span>';
     html += '<button class="btn-danger" onclick="editPlan()">✏️ Edit Plan</button>';
   } else {
+    // Live progress so the user knows what is still unplanned before submitting.
+    let visits = 0; const covered = {}, daysUsed = {};
+    Object.keys(draftGrid).forEach(store => {
+      Object.keys(draftGrid[store]).forEach(d => {
+        const vt = draftGrid[store][d];
+        if (OFF_DAY_TYPES[vt]) return;
+        visits++; covered[store] = 1; daysUsed[d] = 1;
+      });
+    });
+    const totalStores = (data.stores || []).length;
+    const missing = Math.max(0, totalStores - Object.keys(covered).length);
     html += '<span style="color:var(--muted);font-size:13px">' +
-            '💡 L/H/WO = full day (locks other stores). WOH = half day.</span>';
+            '<b>' + visits + '</b> visits across <b>' + Object.keys(daysUsed).length + '</b> days · ' +
+            (missing ? '<span style="color:var(--danger)"><b>' + missing +
+                       '</b> store' + (missing === 1 ? '' : 's') + ' still unplanned</span>'
+                     : '<span style="color:var(--success)">every store covered</span>') +
+            '</span>';
     html += '<button class="btn-primary" id="submit-plan-btn" onclick="submitPlan()">Submit &amp; Lock Plan</button>';
   }
   html += '</div>';
+  return html;
+}
 
-  // ------- Base Store selector (bottom of Visit Plan, RM/CM only, edit own data) -------
+/* Base store picker, shown under the plan for the person who owns it. */
+function baseStoreFooterHtml(data, canEditPlan){
+  let html = '';
   if (canEditPlan){
     html += '<div class="base-store-footer">';
     html += '<div class="base-store-header">🏠 Base Store</div>';
@@ -1489,8 +1758,7 @@ function renderVisitPlan(data){
     html += '<div class="base-store-body"><span>' + escapeHtml(data.baseStore) + '</span></div>';
     html += '</div>';
   }
-
-  c.innerHTML = html;
+  return html;
 }
 
 /**
