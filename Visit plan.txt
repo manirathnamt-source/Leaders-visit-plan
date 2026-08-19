@@ -1682,35 +1682,90 @@ function reviewAuditIssue(caller, issueKey, decision, notes) {
 }
 
 // ======= TOP PERFORMER =======
+/**
+ * Planned + actual totals for EVERY RM in a range, in one pass over the plan
+ * sheet and one pass over the swipe sheet.
+ *
+ * Replaces calling getPlannedVsActual once per RM, which re-scanned both
+ * sheets every time. The numbers are identical:
+ *   planned = plan rows in range whose visit type counts as a visit
+ *   actual  = one visit per store per calendar day, matching _getVisitEvents
+ * (getPlannedVsActual also folds in mapped stores with 0 planned / 0 actual,
+ * which cannot change either total.)
+ */
+function _rangeTotalsByRM(range) {
+  const cacheKey = 'totals|' + range.from + '|' + range.to;
+  if (_MEMO[cacheKey]) return _MEMO[cacheKey];
+
+  const monthSet = new Set(range.months);
+  const totals = {};                       // rmKey -> { name, planned, actual }
+  const bump = (rawName) => {
+    const k = _norm(rawName);
+    if (!totals[k]) totals[k] = { name: String(rawName).trim(), planned: 0, actual: 0 };
+    return totals[k];
+  };
+
+  // --- planned ---
+  // Candidacy and counting use DIFFERENT filters, matching the original:
+  // an RM became a candidate for any in-range plan row (empty date allowed,
+  // any visit type), but only visit-type rows with a real in-range date were
+  // counted. Registering candidates in the same order keeps tie-breaking
+  // between two equally-scoring RMs identical to before.
+  const pd = _values(SHEETS.VISIT_PLAN);
+  for (let i = 1; i < pd.length; i++) {
+    const rm = String(pd[i][0] || '').trim();
+    if (!rm) continue;
+    if (!monthSet.has(_monthStr(pd[i][1]))) continue;
+    const plannedDate = pd[i][3];
+    if (plannedDate && !_inRange(plannedDate, range)) continue;
+    const entry = bump(rm);                  // candidate, in sheet order
+    if (!_inRange(plannedDate, range)) continue;
+    const vt = String(pd[i][4] || 'R').trim().toUpperCase();
+    if (!VISIT_TYPES[vt] || !VISIT_TYPES[vt].isVisit) continue;
+    entry.planned++;
+  }
+
+  // --- actual: dedupe to one visit per RM per store per day ---
+  const sd = _values(SHEETS.LOGIN_LOGOUT);
+  const seen = {};
+  for (let i = 1; i < sd.length; i++) {
+    const emp = String(sd[i][LC.EMP_NAME] || '').trim();
+    if (!emp) continue;
+    const dt = sd[i][LC.SWIPE_DATE] instanceof Date
+      ? sd[i][LC.SWIPE_DATE]
+      : new Date(sd[i][LC.SWIPE_DATE]);
+    if (isNaN(dt)) continue;
+    if (!_inRange(dt, range)) continue;
+    const store = _cleanStoreName(sd[i][LC.STORE_NAME]);
+    if (!store) continue;
+    const k = _norm(emp) + '|' + store + '|' + _fmtDate(dt);
+    if (seen[k]) continue;
+    seen[k] = 1;
+    bump(emp).actual++;
+  }
+
+  _MEMO[cacheKey] = totals;
+  return totals;
+}
+
 function getTopPerformer(monthOrRange, scopeRMs) {
   const range = _normalizeRange(monthOrRange);
   if (!range) return null;
-  const monthSet = new Set(range.months);
-  const data = _values(SHEETS.VISIT_PLAN);
-  if (data.length < 2) return null;
-  const rmSet = new Set();
-  for (let i = 1; i < data.length; i++) {
-    // Consider an RM as a candidate if any of their plan rows fall in the range
-    if (!monthSet.has(_monthStr(data[i][1]))) continue;
-    const plannedDate = data[i][3];
-    if (plannedDate && !_inRange(plannedDate, range)) continue;
-    rmSet.add(String(data[i][0]).trim());
-  }
-  if (!rmSet.size) return null;
+  const totals = _rangeTotalsByRM(range);
   const scopeSet = scopeRMs ? new Set(scopeRMs.map(n => _norm(n))) : null;
 
   let top = null, topPct = -1, topActual = -1;
-  rmSet.forEach(rm => {
-    if (scopeSet && !scopeSet.has(_norm(rm))) return;
-    const r = getPlannedVsActual(rm, range);
-    if (r.kpi.totalPlanned <= 0) return;
-    if (r.kpi.completion > topPct
-        || (r.kpi.completion === topPct && r.kpi.totalActual > topActual)) {
-      topPct = r.kpi.completion;
-      topActual = r.kpi.totalActual;
+  Object.keys(totals).forEach(k => {
+    if (scopeSet && !scopeSet.has(k)) return;
+    const t = totals[k];
+    if (t.planned <= 0) return;              // no plan in range = not a candidate
+    const completion = Math.round((t.actual / t.planned) * 100);
+    if (completion > topPct || (completion === topPct && t.actual > topActual)) {
+      topPct = completion;
+      topActual = t.actual;
       top = {
-        rmName: rm, completion: r.kpi.completion,
-        totalPlanned: r.kpi.totalPlanned, totalActual: r.kpi.totalActual
+        rmName: t.name, completion: completion,
+        totalPlanned: t.planned, totalActual: t.actual
       };
     }
   });
