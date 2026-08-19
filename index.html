@@ -418,6 +418,7 @@
     <!-- Scope (Admin only) -->
     <div id="scope-bar" class="ctx-group" style="display:none">
       <span id="scope-icon" class="ctx-icon">👑</span>
+      <span id="scope-label" class="ctx-label"></span>
       <label class="ctx-label">Cluster:</label>
       <select id="cluster-select" onchange="onClusterChange()" class="ctx-select"></select>
       <label class="ctx-label">RM:</label>
@@ -784,10 +785,11 @@ function doLogin(){
           currentRM = actor.name;
           selectedCluster = actor.cluster || '';
         } else {
-          // Admin: default to first accessible RM
-          selectedCluster = accessibleClusters[0] || '';
-          const firstInCluster = accessibleRMs.find(r => (r.cluster || '') === selectedCluster);
-          currentRM = firstInCluster ? firstInCluster.name : (accessibleRMs[0] && accessibleRMs[0].name) || null;
+          // Admin: start on the WHOLE region — no cluster filter, no user picked.
+          // currentRM is only a fallback so the per-user tabs have something to
+          // show if Admin drills into them; the landing view is the Summary.
+          selectedCluster = '';
+          currentRM = (accessibleRMs[0] && accessibleRMs[0].name) || null;
         }
         currentMonth = currentMonthDefault();
         currentRange = fullMonthRange(currentMonth);
@@ -877,6 +879,17 @@ function bootstrapAfterLogin(){
 
   // Banner + settings-bar depend on who's being viewed
   applyViewingUI();
+
+  // Landing view.
+  //   Admin → region-wide Summary. No user selection required.
+  //   Others → Overview, which is the tab marked active in the markup but was
+  //            never loaded at boot (loadOverview only ran from switchTab), so
+  //            it sat on "Loading…" until you clicked away and back.
+  if (isAdmin()){
+    switchTab('summary');
+  } else {
+    loadOverview();
+  }
 
   loadDashboard();
   startAutoRefresh();

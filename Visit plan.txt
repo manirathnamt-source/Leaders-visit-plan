@@ -326,7 +326,9 @@ function getDistance(lat1, lon1, lat2, lon2) {
  * Both directions (A→B and B→A) are stored so the caller doesn't need to sort.
  */
 function _loadDistanceMatrix() {
+  if (_MEMO.distMatrix) return _MEMO.distMatrix;
   const out = { matrix: {}, available: false };
+  _MEMO.distMatrix = out;   // same object on every return path below
   const data = _values(SHEETS.DISTANCE_CALC);
   if (data.length < 5) return out;
 
@@ -769,7 +771,9 @@ function _getLastVisitDates(userName) {
  * Each entry: { displayName, lat, lon, type }
  */
 function _buildStoreMasterMap() {
+  if (_MEMO.storeMaster) return _MEMO.storeMaster;
   const map = {};
+  _MEMO.storeMaster = map;
   const data = _values(SHEETS.STORE_MASTER);
   for (let i = 1; i < data.length; i++) {
     const name = String(data[i][0] || '').trim();
