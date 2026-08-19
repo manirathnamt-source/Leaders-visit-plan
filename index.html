@@ -2298,16 +2298,35 @@ function jumpToRM(rmName){
 function whenGoogleReady(cb, tries){
   tries = tries || 0;
   if (typeof google !== 'undefined' && google.script && google.script.run){
+    $('login-error').textContent = '';
     cb();
     return;
   }
-  if (tries > 50){
+  // 200 x 100ms = 20s. The old 5s limit gave up too early on slow connections,
+  // and left no way to retry short of reloading the page.
+  if (tries > 200){
     console.error('google.script.run never became available');
-    const sel = document.getElementById('login-name');
-    if (sel) sel.innerHTML = '<option value="">-- Error: could not reach server --</option>';
+    const sel = $('login-name');
+    if (sel) sel.innerHTML = '<option value="">-- Could not reach server --</option>';
+    $('login-error').innerHTML =
+      'Could not connect to Google. This is usually third-party cookies being ' +
+      'blocked, or an ad-blocker on this tab.<br>' +
+      '<button class="btn-secondary" style="margin-top:8px" ' +
+      'onclick="retryConnect()">Try again</button>';
     return;
   }
+  if (tries === 60){        // ~6s in: say something rather than sit silently
+    $('login-error').textContent = 'Still connecting to Google…';
+  }
   setTimeout(() => whenGoogleReady(cb, tries + 1), 100);
+}
+
+/** Retry the connection without forcing a full page reload. */
+function retryConnect(){
+  $('login-error').textContent = 'Reconnecting…';
+  const sel = $('login-name');
+  if (sel) sel.innerHTML = '<option value="">Loading names…</option>';
+  whenGoogleReady(() => populateLoginNames(), 0);
 }
 
 // Run on load (not DOMContentLoaded) so Apps Script has a chance to inject its bridge.
