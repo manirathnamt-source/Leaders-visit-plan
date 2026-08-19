@@ -332,6 +332,33 @@
   .pe-counter b{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
       margin-bottom:2px}
 
+  /* ---- month review: what the finished plan looks like before locking ---- */
+  .pm{margin:0 14px 14px;border:1px solid var(--border);border-radius:10px;background:#fff;
+      overflow:hidden}
+  .pm > h3{margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+      color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--border);
+      display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .pm > h3 .hint{font-weight:500;letter-spacing:0;text-transform:none;font-size:11.5px}
+  .pm-wrap{max-height:340px;overflow-y:auto}
+  .pm table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .pm th{position:sticky;top:0;background:#f1f5fb;text-align:left;padding:8px 12px;
+      font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+      color:var(--muted);border-bottom:1px solid var(--border);z-index:1}
+  .pm th.r,.pm td.r{text-align:right}
+  .pm td{padding:8px 12px;border-bottom:1px solid #eef1f6;vertical-align:top}
+  .pm tr:last-child td{border-bottom:none}
+  .pm tr.gap td{background:#fff5f5}
+  .pm .sname{font-weight:600}
+  .pm .cnt{font-weight:700;font-variant-numeric:tabular-nums}
+  .pm .dates{color:var(--muted);font-size:11.5px;line-height:1.6}
+  .pm .dchip{display:inline-block;background:#e8f0fe;color:#1d4ed8;border-radius:5px;
+      padding:1px 6px;margin:0 3px 3px 0;font-weight:600;font-variant-numeric:tabular-nums}
+  .pm .dchip.off{background:#eceff4;color:var(--muted)}
+  .pm .warnrow{color:var(--danger);font-weight:600;font-size:11.5px}
+  .pm-foot{padding:9px 14px;border-top:1px solid var(--border);background:#f8fafc;
+      font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+  .pm-foot b{color:var(--text)}
+
   /* ---- RM vs CM day-wise itinerary, inside the grid so days stay aligned ---- */
   .vp-grid tbody tr.itin-head td{
     background:#eef2ff;color:var(--navy);text-align:left;padding:7px 10px;
@@ -1498,6 +1525,7 @@ function renderVisitPlan(data){
   // good for reading a whole month at once even though it was painful to edit.
   if (!effectivelyLocked){
     html += planCalendarHtml(data);
+    html += planMonthSummaryHtml(data);
     html += planSubmitBarHtml(data, canEditPlan, effectivelyLocked);
     html += baseStoreFooterHtml(data, canEditPlan);
     c.innerHTML = html;
@@ -1663,6 +1691,76 @@ function planDayEditorHtml(data){
               ' this day</b>' + others.join('<br>') + '</div>';
     }
   }
+  return html;
+}
+
+/**
+ * Store-by-store review of the whole month, shown under the calendar while a
+ * plan is still editable. The calendar answers "what is on the 9th"; this
+ * answers "have I covered everything" — the question you have right before
+ * locking. Stores with no visit sort to the top.
+ */
+function planMonthSummaryHtml(data){
+  const stores = (data.stores || []).filter(s => s.storeName);
+  if (!stores.length) return '';
+
+  const rows = stores.map(s => {
+    const g = draftGrid[s.storeName] || {};
+    const days = Object.keys(g)
+      .filter(d => !OFF_DAY_TYPES[g[d]])
+      .map(Number).sort((a, b) => a - b);
+    return { name: s.storeName, days: days, types: g };
+  });
+  rows.sort((a, b) => {
+    if (!a.days.length !== !b.days.length) return a.days.length ? 1 : -1;
+    if (a.days.length !== b.days.length) return b.days.length - a.days.length;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Off-days are a property of the date, so they are summarised separately.
+  const offDays = [];
+  (data.dayMeta || []).forEach(dm => {
+    const off = planOffOn(dm.day);
+    if (off) offDays.push({ day: dm.day, code: off });
+  });
+
+  const totalVisits = rows.reduce((n, r) => n + r.days.length, 0);
+  const gaps = rows.filter(r => !r.days.length).length;
+
+  let html = '<div class="pm"><h3>Month review' +
+             '<span class="hint">every store, and the dates you gave it</span></h3>' +
+             '<div class="pm-wrap"><table><thead><tr>' +
+             '<th>Store</th><th class="r">Visits</th><th>Dates</th>' +
+             '</tr></thead><tbody>';
+
+  rows.forEach(r => {
+    html += '<tr' + (r.days.length ? '' : ' class="gap"') + '>';
+    html += '<td class="sname">' + escapeHtml(r.name) + '</td>';
+    html += '<td class="r cnt">' + (r.days.length || '—') + '</td>';
+    html += '<td>' + (r.days.length
+      ? '<span class="dates">' + r.days.map(d => {
+          const t = data.visitTypes[r.types[d]];
+          return '<span class="dchip" title="' + escapeHtml(t ? t.label : r.types[d]) + '">' +
+                 d + '</span>';
+        }).join('') + '</span>'
+      : '<span class="warnrow">No visit planned this month</span>') + '</td>';
+    html += '</tr>';
+  });
+
+  if (offDays.length){
+    html += '<tr><td class="sname">Off days</td><td class="r cnt">' + offDays.length + '</td>' +
+            '<td><span class="dates">' + offDays.map(o =>
+              '<span class="dchip off" title="' + escapeHtml(OFF_DAY_TYPES[o.code]) + '">' +
+              o.day + '</span>').join('') + '</span></td></tr>';
+  }
+
+  html += '</tbody></table></div><div class="pm-foot">' +
+          '<span><b>' + totalVisits + '</b> visits planned</span>' +
+          '<span><b>' + (rows.length - gaps) + '</b> of ' + rows.length + ' stores covered</span>' +
+          (gaps ? '<span style="color:var(--danger)"><b>' + gaps + '</b> store' +
+                  (gaps === 1 ? '' : 's') + ' with nothing planned</span>'
+                : '<span style="color:var(--success)">every store has a visit</span>') +
+          '</div></div>';
   return html;
 }
 
