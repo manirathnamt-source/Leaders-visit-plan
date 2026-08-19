@@ -1217,6 +1217,72 @@ function _computePlannedKM(rmName, grid) {
   return total;
 }
 
+// ======= RM <-> CM DAY-WISE ITINERARY =======
+/**
+ * The RMs paired with this CM in Store Mapping — the mirror of _accessibleCMs,
+ * which only ever looked downward from an RM.
+ */
+function _rmsForCM(cmName) {
+  const sd = _values(SHEETS.STORE_MAPPING);
+  const found = {};
+  const target = _norm(cmName);
+  for (let i = 1; i < sd.length; i++) {
+    if (_norm(sd[i][2]) !== target) continue;      // col C = CM Name
+    const rm = String(sd[i][1] || '').trim();      // col B = RM Name
+    if (rm) found[_norm(rm)] = rm;
+  }
+  return Object.keys(found).map(k => found[k]).sort();
+}
+
+/** day -> [{ store, type }] of planned VISITS (off-days excluded) for a month. */
+function _itineraryFor(name, month) {
+  const plan = getVisitPlan(name, month);
+  const days = {};
+  Object.keys(plan.grid).forEach(store => {
+    Object.keys(plan.grid[store]).forEach(d => {
+      const vt = plan.grid[store][d];
+      if (!VISIT_TYPES[vt] || !VISIT_TYPES[vt].isVisit) return;
+      if (!days[d]) days[d] = [];
+      days[d].push({ store: store, type: vt });
+    });
+  });
+  return days;
+}
+
+/**
+ * The viewed user on top, then everyone on the other side of their stores, so
+ * one date column reads "RM — Jayanagar" with "CM — HSR" directly underneath.
+ * Works both ways: an RM sees their CMs, a CM sees their RMs.
+ *
+ * Costs no extra sheet reads — getVisitPlan is served from the cached values.
+ */
+function getItineraryRows(viewedUser, month) {
+  const u = _lookupUser(viewedUser);
+  const role = u ? u.role : ROLES.RM;
+  const displayName = u ? u.canonicalName : viewedUser;
+
+  let counterparts, counterRole;
+  if (role === ROLES.CM) {
+    counterparts = _rmsForCM(viewedUser);
+    counterRole  = ROLES.RM;
+  } else {
+    counterparts = _accessibleCMs({
+      role: ROLES.RM, canonicalName: displayName, cluster: (u ? u.cluster : '')
+    }).map(function (c) { return c.name; });
+    counterRole  = ROLES.CM;
+  }
+
+  const rows = [{
+    name: displayName, role: role, self: true,
+    days: _itineraryFor(viewedUser, month)
+  }];
+  counterparts.forEach(function (n) {
+    rows.push({ name: n, role: counterRole, self: false, days: _itineraryFor(n, month) });
+  });
+
+  return { rows: rows, role: role, counterRole: counterRole };
+}
+
 // ======= SWIPE AGGREGATION =======
 /**
  * Aggregate swipes into per-store-per-day "visit events".
@@ -2067,6 +2133,7 @@ function getDashboardData(caller, viewedRM, month, range) {
     additionalRowCount: ADDITIONAL_VISIT_ROWS,
     allStores,
     plan, planKPI, comparison, travel, audit,
+    itinerary: getItineraryRows(rmName, month),
     topPerformer: top,
     range: effectiveRange ? { from: effectiveRange.from, to: effectiveRange.to,
                               spansMultipleMonths: effectiveRange.months.length > 1,

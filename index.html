@@ -255,6 +255,29 @@
   .day-cell.type-L{background:#fb8c00}
   .day-cell.type-WO{background:#616161}
   .day-cell.type-WOH{background:#9e9e9e;background-image:linear-gradient(135deg,#9e9e9e 50%,#cfcfcf 50%)}
+  /* ---- RM vs CM day-wise itinerary, inside the grid so days stay aligned ---- */
+  .vp-grid tbody tr.itin-head td{
+    background:#eef2ff;color:var(--navy);text-align:left;padding:7px 10px;
+    font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+    border-top:2px solid var(--navy);
+  }
+  .vp-grid tbody tr.itin-row td.itin-name{
+    text-align:left;padding:6px 10px;font-weight:700;font-size:12px;
+  }
+  .vp-grid tbody tr.itin-self    td.sticky-col{background:#e8f0fe}
+  .vp-grid tbody tr.itin-counter td.sticky-col{background:#fdf2f8}
+  .vp-grid tbody td.itin-cell{
+    padding:0 2px;font-size:10px;font-weight:700;line-height:32px;
+    color:var(--navy);overflow:hidden;max-width:50px;
+  }
+  .vp-grid tbody td.itin-cell.weekend{background:var(--weekend-bg)}
+  .vp-grid tbody tr.itin-self    td.itin-cell.filled{background:#d2e3fc;color:#174ea6}
+  .vp-grid tbody tr.itin-counter td.itin-cell.filled{background:#fce7f3;color:#9d174d}
+  .role-chip{display:inline-block;padding:1px 7px;border-radius:10px;
+             font-size:10px;font-weight:700;color:#fff}
+  .role-chip.RM{background:var(--primary)}
+  .role-chip.CM{background:var(--cluster)}
+
   .locked-badge{display:inline-block;width:100%;height:32px;line-height:32px;color:#fff;font-weight:700;font-size:11px}
   .locked-badge.empty{color:var(--muted);background:#fafbfc}
   .vp-submit-bar{background:var(--card);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1px solid var(--border)}
@@ -1409,6 +1432,7 @@ function renderVisitPlan(data){
     const chosen = additionalStores[i] || '';
     html += additionalRowHtml(i, chosen, data, effectivelyLocked);
   }
+  html += itineraryRowsHtml(data);
   html += '</tbody></table></div>';
 
   html += '<div class="vp-submit-bar">';
@@ -1467,6 +1491,54 @@ function renderVisitPlan(data){
   }
 
   c.innerHTML = html;
+}
+
+/**
+ * Day-wise itinerary rows appended to the bottom of the plan grid: the viewed
+ * user on top, the other side directly underneath. Because they live in the
+ * same table, a single date column reads "RM — Jayanagar" above "CM — HSR"
+ * with no column-alignment work.
+ */
+function itineraryRowsHtml(data){
+  const itin = data.itinerary;
+  if (!itin || !itin.rows || !itin.rows.length) return '';
+  // Nothing to compare against if the user has no counterpart.
+  if (itin.rows.length < 2) return '';
+
+  let html = '<tr class="itin-head"><td colspan="' + (2 + data.dayMeta.length) + '">' +
+             'Day-wise itinerary — ' + escapeHtml(itin.role) + ' vs ' +
+             escapeHtml(itin.counterRole) + ' (planned visits only)</td></tr>';
+
+  itin.rows.forEach(p => {
+    html += '<tr class="itin-row ' + (p.self ? 'itin-self' : 'itin-counter') + '">';
+    html += '<td class="sticky-col itin-name">' + escapeHtml(p.name) + '</td>';
+    html += '<td class="sticky-col col2"><span class="role-chip ' + escapeHtml(p.role) +
+            '">' + escapeHtml(p.role) + '</span></td>';
+    data.dayMeta.forEach(dm => {
+      const list = (p.days && p.days[dm.day]) || [];
+      const wk = dm.weekend ? ' weekend' : '';
+      if (!list.length){ html += '<td class="itin-cell' + wk + '"></td>'; return; }
+      const full = list.map(x => {
+        const t = data.visitTypes[x.type];
+        return x.store + (t ? ' (' + t.label + ')' : '');
+      }).join(', ');
+      html += '<td class="itin-cell filled' + wk + '" title="' + escapeHtml(full) + '">' +
+              escapeHtml(list.map(x => storeAbbr(x.store)).join('+')) + '</td>';
+    });
+    html += '</tr>';
+  });
+  return html;
+}
+
+/* Day columns are narrow, so squeeze the store name and keep the full text in
+   the tooltip. "MGL - CITY CENTER MALL" -> "CITY". */
+function storeAbbr(name){
+  let s = String(name || '').trim();
+  const dash = s.indexOf(' - ');            // drop the city prefix if present
+  if (dash > 0 && dash <= 5) s = s.slice(dash + 3);
+  if (!s) return '';
+  if (s.length <= 4) return s.toUpperCase();
+  return s.split(/[\s\-,\/]+/)[0].slice(0, 4).toUpperCase();
 }
 
 function kpiCard(cls, label, value){
