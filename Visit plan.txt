@@ -1899,20 +1899,25 @@ function getScopeSummary(caller, monthOrRange, clusterFilter) {
   const rows = [];
   let totalPlanned = 0, totalActual = 0, totalKM = 0, totalAudits = 0;
 
+  // Planned/actual for EVERY RM in two passes, instead of re-deriving them per
+  // RM inside the loop. This is the same index getTopPerformer uses.
+  const totals = _rangeTotalsByRM(range);
+
   rms.forEach(r => {
-    const pa = getPlannedVsActual(r.name, range);
+    const t  = totals[_norm(r.name)] || { planned: 0, actual: 0 };
+    const completion = t.planned > 0 ? Math.round((t.actual / t.planned) * 100) : 0;
     const travel = getTravelLog(r.name, range);
-    const audit = getAuditLog(r.name, range);
-    totalPlanned += pa.kpi.totalPlanned;
-    totalActual  += pa.kpi.totalActual;
+    const audit  = getAuditLog(r.name, range);
+    totalPlanned += t.planned;
+    totalActual  += t.actual;
     totalKM      += travel.totalKM;
     totalAudits  += audit.summary.open;
     rows.push({
       rmName       : r.name,
       cluster      : r.cluster,
-      planned      : pa.kpi.totalPlanned,
-      actual       : pa.kpi.totalActual,
-      completion   : pa.kpi.completion,
+      planned      : t.planned,
+      actual       : t.actual,
+      completion   : completion,
       totalKM      : travel.totalKM,
       openIssues   : audit.summary.open,
       highSeverity : audit.summary.unmapped + audit.summary.offViolation

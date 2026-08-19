@@ -783,6 +783,7 @@ function renderMonthButtons(){
  */
 function selectMonth(ym){
   if (!ym || ym === currentMonth) return;
+  clearTabCaches();
   currentMonth = ym;
   currentRange = fullMonthRange(ym);
   draftGrid = {};
@@ -1059,6 +1060,7 @@ function onRMViewChange(){
   } else {
     currentRM = val;
   }
+  clearTabCaches();          // now looking at a different person's data
   applyViewingUI();
   loadDashboard();
 }
@@ -1149,12 +1151,14 @@ function rebuildRMSelect(){
 
 function onClusterChange(){
   selectedCluster = $('cluster-select').value;
+  clearTabCaches();
   rebuildRMSelect();
   refreshUserLabel();
   loadDashboard();
 }
 function onRMChange(){
   currentRM = $('rm-select').value;
+  clearTabCaches();
   if (!currentRM) return;
   // Sync cluster dropdown to the chosen RM's cluster (Admin only).
   // This way when Admin picks an RM, the cluster filter above reflects it.
@@ -1198,6 +1202,7 @@ function showSummaryView(){ switchTab('summary'); }
 
 function onMonthChange(){
   currentMonth = $('month-picker').value;
+  clearTabCaches();
   draftGrid = {}; additionalStores = [];
   // Reset range to the new full month. RM can widen/narrow it afterwards.
   currentRange = fullMonthRange(currentMonth);
@@ -1212,6 +1217,7 @@ function onMonthChange(){
  */
 function onRangeChange(){
   const from = $('range-from').value;
+  clearTabCaches();
   const to   = $('range-to').value;
   if (!from || !to){
     showToast('Please select both From and To dates.', 'error');
@@ -1235,6 +1241,7 @@ function onRangeChange(){
  */
 function resetRangeToMonth(){
   if (!currentMonth) return;
+  clearTabCaches();
   currentRange = fullMonthRange(currentMonth);
   syncRangeInputs();
   renderRangeStatus();
@@ -1311,8 +1318,8 @@ function manualRefresh(){
     btn.classList.add('spinning');
     btn.disabled = true;
   }
-  // Clear any cached overview so it re-fetches on next tab switch
-  if (typeof overviewCache !== 'undefined') overviewCache = null;
+  // Force every tab to re-fetch — that is what "refresh" means.
+  clearTabCaches();
 
   const done = () => {
     if (btn){ btn.classList.remove('spinning'); btn.disabled = false; }
@@ -1627,9 +1634,7 @@ function planCalendarHtml(data){
 
   // ---- month ----
   html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
-          '<button type="button" class="btn-secondary btn-sm" id="copy-prev-btn" ' +
-          'onclick="copyLastMonthPlan()" title="Pre-fill this month from last month\'s visits">' +
-          '⧉ Copy last month</button></h3><div class="pe-cal">';
+          '<span class="hint">click a date to plan it</span></h3><div class="pe-cal">';
   html += '<div class="pe-dow">' + order.map(d => '<span>' + d + '</span>').join('') + '</div>';
   html += '<div class="pe-grid">';
   for (let b = 0; b < (lead < 0 ? 0 : lead); b++) html += '<div class="pe-day blank"></div>';
@@ -1804,71 +1809,6 @@ function planMonthSummaryHtml(data){
                 : '<span style="color:var(--success)">every store has a visit</span>') +
           '</div></div>';
   return html;
-}
-
-/**
- * Pre-fill this month from last month's visits.
- *
- * Copies by date number, which is what people expect ("I do Balmatta on the
- * 3rd"). Two things are deliberately dropped:
- *   - dates the shorter month does not have (31st into a 30-day month)
- *   - off-days, since a Week Off copied by number lands on the wrong weekday
- * Both are reported rather than silently discarded.
- */
-function copyLastMonthPlan(){
-  if (!currentData || !currentRM || !currentMonth) return;
-
-  const hasDraft = Object.keys(draftGrid).some(s => Object.keys(draftGrid[s] || {}).length);
-  if (hasDraft && !confirm(
-      'This will add last month\'s visits on top of what you have already planned.\n\n' +
-      'Existing entries on the same store and date are kept. Continue?')) return;
-
-  const btn = $('copy-prev-btn');
-  if (btn){ btn.disabled = true; btn.textContent = 'Copying…'; }
-
-  google.script.run
-    .withSuccessHandler(res => {
-      if (btn){ btn.disabled = false; btn.textContent = '⧉ Copy last month'; }
-      if (!res || res.error){ showToast((res && res.error) || 'Could not copy.', 'error'); return; }
-
-      const maxDay = (currentData.dayMeta || []).length;
-      const mine = {};
-      (currentData.stores || []).forEach(s => { mine[s.storeName] = 1; });
-
-      let copied = 0, pastEnd = 0, offSkipped = 0, notMine = 0;
-      Object.keys(res.grid || {}).forEach(store => {
-        if (!mine[store]){ notMine++; return; }        // store no longer mapped to them
-        Object.keys(res.grid[store]).forEach(dStr => {
-          const day = Number(dStr);
-          const vt  = res.grid[store][dStr];
-          if (OFF_DAY_TYPES[vt]){ offSkipped++; return; }
-          if (!day || day > maxDay){ pastEnd++; return; }
-          if (!draftGrid[store]) draftGrid[store] = {};
-          if (draftGrid[store][day]) return;           // never overwrite existing work
-          draftGrid[store][day] = vt;
-          copied++;
-        });
-      });
-
-      if (!copied && !pastEnd && !offSkipped){
-        showToast('Nothing to copy — no plan found for ' + monthLabel(res.month) + '.', 'error');
-        return;
-      }
-
-      renderVisitPlan(currentData);
-
-      const notes = [];
-      if (pastEnd)    notes.push(pastEnd + ' fell on dates this month does not have');
-      if (offSkipped) notes.push(offSkipped + ' off-day' + (offSkipped === 1 ? '' : 's') + ' skipped');
-      if (notMine)    notes.push(notMine + ' store' + (notMine === 1 ? '' : 's') + ' no longer yours');
-      showToast('Copied ' + copied + ' visit' + (copied === 1 ? '' : 's') + ' from ' +
-                monthLabel(res.month) + (notes.length ? ' · ' + notes.join(', ') : ''), 'success');
-    })
-    .withFailureHandler(err => {
-      if (btn){ btn.disabled = false; btn.textContent = '⧉ Copy last month'; }
-      showToast('Error: ' + err.message, 'error');
-    })
-    .getPreviousPlan(caller(), currentRM, currentMonth);
 }
 
 function selectPlanDay(day){
@@ -2514,6 +2454,17 @@ function reviewIssue(issueKey, decision){
 /* ============ SCOPE SUMMARY ============ */
 function loadSummary(){
   if (isRM()) return; // no summary tab for RMs
+
+  // The heaviest call in the app — every accessible RM gets travel and audit
+  // computed. Never repeat it for a view already on screen.
+  const key = (selectedCluster || '*') + '|' +
+              (currentRange ? currentRange.from + '_' + currentRange.to : currentMonth);
+  if (summaryCache && summaryKey === key){
+    currentSummary = summaryCache;
+    renderSummary(summaryCache);
+    return;
+  }
+
   $('summary-content').innerHTML = '<div class="empty"><span class="spinner"></span> Loading summary…</div>';
   $('summary-heading').textContent = isAdmin()
     ? (selectedCluster ? 'Cluster Summary — ' + selectedCluster : 'Organization Summary — All Clusters')
@@ -2523,6 +2474,7 @@ function loadSummary(){
     .withSuccessHandler(res => {
       if (!res.success){ $('summary-content').innerHTML = '<div class="empty">' + escapeHtml(res.message || 'Failed') + '</div>'; return; }
       currentSummary = res;
+      summaryCache = res; summaryKey = key;
       renderSummary(res);
     })
     .withFailureHandler(err => {
@@ -2579,7 +2531,16 @@ function renderSummary(s){
 }
 
 /* ============ OVERVIEW TAB ============ */
-let overviewCache = null;   // cached response to power the popup without re-fetch
+/* Cached tab responses. Switching away and back re-rendered from scratch,
+   which meant a fresh server round-trip every time. Keyed by what the answer
+   depends on, and cleared whenever the underlying data is reloaded. */
+let overviewCache = null, overviewKey = null;
+let summaryCache  = null, summaryKey  = null;
+
+function clearTabCaches(){
+  overviewCache = null; overviewKey = null;
+  summaryCache  = null; summaryKey  = null;
+}
 
 /**
  * Loads the Overview data for the currently viewed user + current FY.
@@ -2591,15 +2552,20 @@ function loadOverview(){
     c.innerHTML = '<div class="empty">Select a user.</div>';
     return;
   }
-  c.innerHTML = '<div class="empty"><span class="spinner"></span>Loading overview…</div>';
   const fyStart = currentFYStart();
+  const key = currentRM + '|' + fyStart;
+  if (overviewCache && overviewKey === key){    // already have this exact view
+    renderOverview(overviewCache);
+    return;
+  }
+  c.innerHTML = '<div class="empty"><span class="spinner"></span>Loading overview…</div>';
   google.script.run
     .withSuccessHandler(res => {
       if (res && res.error){
         c.innerHTML = '<div class="empty" style="color:var(--danger)">' + escapeHtml(res.error) + '</div>';
         return;
       }
-      overviewCache = res;
+      overviewCache = res; overviewKey = key;
       renderOverview(res);
     })
     .withFailureHandler(err => {
