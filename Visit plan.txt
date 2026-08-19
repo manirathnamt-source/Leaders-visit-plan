@@ -1283,6 +1283,48 @@ function getItineraryRows(viewedUser, month) {
   return { rows: rows, role: role, counterRole: counterRole };
 }
 
+// ======= COPY LAST MONTH'S PLAN =======
+/** 'YYYY-MM' -> the month before it. */
+function _prevMonth(ym) {
+  const [y, m] = String(ym).split('-').map(Number);
+  const d = new Date(y, m - 2, 1);              // m is 1-based; -2 steps back one month
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+/**
+ * The previous month's plan for a user, so the UI can pre-fill a new month
+ * instead of making them re-enter a route they repeat every cycle.
+ *
+ * Returns the raw grid; the client decides what to keep. Off-days are included
+ * but the client drops them, because a Week Off copied by date number would
+ * land on the wrong weekday.
+ */
+function getPreviousPlan(caller, rmName, month) {
+  const u = _assertCaller(caller);
+  if (!u) return { error: 'Not authenticated.' };
+
+  const isSelf = _norm(u.canonicalName) === _norm(rmName);
+  if (!isSelf) return { error: 'You can only copy into your own plan.' };
+  if (!/^\d{4}-\d{2}$/.test(month)) return { error: 'Invalid month.' };
+
+  const prev = _prevMonth(month);
+  const plan = getVisitPlan(rmName, prev);
+  let visits = 0;
+  Object.keys(plan.grid).forEach(function (s) {
+    Object.keys(plan.grid[s]).forEach(function (d) {
+      const vt = plan.grid[s][d];
+      if (VISIT_TYPES[vt] && VISIT_TYPES[vt].isVisit) visits++;
+    });
+  });
+
+  return {
+    month      : prev,
+    grid       : plan.grid,
+    visitCount : visits,
+    daysInMonth: _daysInMonth(prev)
+  };
+}
+
 // ======= SWIPE AGGREGATION =======
 /**
  * Aggregate swipes into per-store-per-day "visit events".

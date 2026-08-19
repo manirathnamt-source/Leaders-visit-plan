@@ -1627,7 +1627,9 @@ function planCalendarHtml(data){
 
   // ---- month ----
   html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
-          '<span class="hint">click a date to plan it</span></h3><div class="pe-cal">';
+          '<button type="button" class="btn-secondary btn-sm" id="copy-prev-btn" ' +
+          'onclick="copyLastMonthPlan()" title="Pre-fill this month from last month\'s visits">' +
+          '⧉ Copy last month</button></h3><div class="pe-cal">';
   html += '<div class="pe-dow">' + order.map(d => '<span>' + d + '</span>').join('') + '</div>';
   html += '<div class="pe-grid">';
   for (let b = 0; b < (lead < 0 ? 0 : lead); b++) html += '<div class="pe-day blank"></div>';
@@ -1802,6 +1804,71 @@ function planMonthSummaryHtml(data){
                 : '<span style="color:var(--success)">every store has a visit</span>') +
           '</div></div>';
   return html;
+}
+
+/**
+ * Pre-fill this month from last month's visits.
+ *
+ * Copies by date number, which is what people expect ("I do Balmatta on the
+ * 3rd"). Two things are deliberately dropped:
+ *   - dates the shorter month does not have (31st into a 30-day month)
+ *   - off-days, since a Week Off copied by number lands on the wrong weekday
+ * Both are reported rather than silently discarded.
+ */
+function copyLastMonthPlan(){
+  if (!currentData || !currentRM || !currentMonth) return;
+
+  const hasDraft = Object.keys(draftGrid).some(s => Object.keys(draftGrid[s] || {}).length);
+  if (hasDraft && !confirm(
+      'This will add last month\'s visits on top of what you have already planned.\n\n' +
+      'Existing entries on the same store and date are kept. Continue?')) return;
+
+  const btn = $('copy-prev-btn');
+  if (btn){ btn.disabled = true; btn.textContent = 'Copying…'; }
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (btn){ btn.disabled = false; btn.textContent = '⧉ Copy last month'; }
+      if (!res || res.error){ showToast((res && res.error) || 'Could not copy.', 'error'); return; }
+
+      const maxDay = (currentData.dayMeta || []).length;
+      const mine = {};
+      (currentData.stores || []).forEach(s => { mine[s.storeName] = 1; });
+
+      let copied = 0, pastEnd = 0, offSkipped = 0, notMine = 0;
+      Object.keys(res.grid || {}).forEach(store => {
+        if (!mine[store]){ notMine++; return; }        // store no longer mapped to them
+        Object.keys(res.grid[store]).forEach(dStr => {
+          const day = Number(dStr);
+          const vt  = res.grid[store][dStr];
+          if (OFF_DAY_TYPES[vt]){ offSkipped++; return; }
+          if (!day || day > maxDay){ pastEnd++; return; }
+          if (!draftGrid[store]) draftGrid[store] = {};
+          if (draftGrid[store][day]) return;           // never overwrite existing work
+          draftGrid[store][day] = vt;
+          copied++;
+        });
+      });
+
+      if (!copied && !pastEnd && !offSkipped){
+        showToast('Nothing to copy — no plan found for ' + monthLabel(res.month) + '.', 'error');
+        return;
+      }
+
+      renderVisitPlan(currentData);
+
+      const notes = [];
+      if (pastEnd)    notes.push(pastEnd + ' fell on dates this month does not have');
+      if (offSkipped) notes.push(offSkipped + ' off-day' + (offSkipped === 1 ? '' : 's') + ' skipped');
+      if (notMine)    notes.push(notMine + ' store' + (notMine === 1 ? '' : 's') + ' no longer yours');
+      showToast('Copied ' + copied + ' visit' + (copied === 1 ? '' : 's') + ' from ' +
+                monthLabel(res.month) + (notes.length ? ' · ' + notes.join(', ') : ''), 'success');
+    })
+    .withFailureHandler(err => {
+      if (btn){ btn.disabled = false; btn.textContent = '⧉ Copy last month'; }
+      showToast('Error: ' + err.message, 'error');
+    })
+    .getPreviousPlan(caller(), currentRM, currentMonth);
 }
 
 function selectPlanDay(day){
