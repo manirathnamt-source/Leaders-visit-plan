@@ -301,6 +301,9 @@
   .pe-day.we .n{color:var(--danger)}
   .pe-day .dots{display:flex;gap:2px;min-height:5px}
   .pe-day .dot{width:4px;height:4px;border-radius:50%;background:var(--primary)}
+  /* second row of dots = where the counterpart (CM for an RM) is that day */
+  .pe-day .dots.cm{min-height:4px}
+  .pe-day .dots.cm .dot{width:4px;height:4px;background:#d01884}
   .pe-day.has{background:#e8f0fe;border-color:#9dbdf5}
   .pe-day.sel{border-color:var(--primary);border-width:2px;background:#d2e3fc}
   .pe-day.off{background:#eceff4}
@@ -1569,6 +1572,22 @@ function planDayMeta(data, day){
   return (data.dayMeta || []).filter(dm => dm.day === day)[0] || null;
 }
 
+/**
+ * What the other side of your stores is doing on a date.
+ * For an RM these are their CMs; for a CM, their RMs.
+ * Always returns a row per counterpart — an empty `stores` means they have
+ * nothing planned that day, which is itself worth showing.
+ */
+function counterpartsOn(data, day){
+  const itin = data.itinerary;
+  if (!itin || !itin.rows) return [];
+  return itin.rows.filter(r => !r.self).map(r => ({
+    name  : r.name,
+    role  : r.role,
+    stores: ((r.days && r.days[day]) || []).slice()
+  }));
+}
+
 /** Visits planned on a day: [{ store, type }] — off-day markers excluded. */
 function planVisitsOn(day){
   const out = [];
@@ -1619,11 +1638,24 @@ function planCalendarHtml(data){
                 (off ? ' off' : '') + (dm.day === selectedPlanDay ? ' sel' : '');
     let dots = '';
     for (let i = 0; i < Math.min(list.length, 4); i++) dots += '<span class="dot"></span>';
+
+    // pink dots underneath = counterpart visits, so days you overlap stand out
+    let cmCount = 0;
+    counterpartsOn(data, dm.day).forEach(c => { cmCount += c.stores.length; });
+    let cmDots = '';
+    for (let i = 0; i < Math.min(cmCount, 4); i++) cmDots += '<span class="dot"></span>';
+
+    const title = dm.day + ' ' + dm.weekday +
+      (list.length ? ' — ' + list.length + ' of yours' : '') +
+      (cmCount ? ' — ' + cmCount + ' by your ' + ((data.itinerary && data.itinerary.counterRole) || 'CM') : '');
+
     html += '<button type="button" class="' + cls + '" onclick="selectPlanDay(' + dm.day + ')" ' +
-            'aria-label="' + dm.day + ' ' + escapeHtml(dm.weekday) + '">' +
+            'title="' + escapeHtml(title) + '" ' +
+            'aria-label="' + escapeHtml(title) + '">' +
             '<span class="n">' + dm.day + '</span>' +
             (off ? '<span class="tag">' + escapeHtml(off) + '</span>'
-                 : '<span class="dots">' + dots + '</span>') +
+                 : '<span class="dots">' + dots + '</span>' +
+                   (cmDots ? '<span class="dots cm">' + cmDots + '</span>' : '')) +
             '</button>';
   });
   html += '</div></div></div>';
@@ -1678,18 +1710,26 @@ function planDayEditorHtml(data){
     '" onclick="setPlanOffDay(\'' + code + '\')">' + escapeHtml(OFF_DAY_TYPES[code]) +
     '</button>').join('') + '</div>';
 
-  // Where the counterpart is that day — the reason this sits beside the calendar.
+  // Where the counterpart is that day. Always shown when one exists — "nothing
+  // planned" is as useful to know as a list of stores.
   const itin = data.itinerary;
-  if (itin && itin.rows && itin.rows.length > 1){
-    const others = itin.rows.filter(r => !r.self)
-      .map(r => {
-        const on = (r.days && r.days[selectedPlanDay]) || [];
-        return on.length ? escapeHtml(r.name) + ': ' + on.map(x => escapeHtml(x.store)).join(', ') : '';
-      }).filter(Boolean);
-    if (others.length){
-      html += '<div class="pe-counter"><b>Your ' + escapeHtml(itin.counterRole) +
-              ' this day</b>' + others.join('<br>') + '</div>';
-    }
+  const others = counterpartsOn(data, selectedPlanDay);
+  if (others.length){
+    html += '<div class="pe-counter"><b>Your ' +
+            escapeHtml((itin && itin.counterRole) || 'CM') + ' on this day</b>';
+    html += others.map(c => {
+      if (!c.stores.length){
+        return '<span style="opacity:.7">' + escapeHtml(c.name) + ' — nothing planned</span>';
+      }
+      return '<b style="display:inline;text-transform:none;letter-spacing:0;font-size:11.5px">' +
+             escapeHtml(c.name) + '</b> — ' +
+             c.stores.map(x => {
+               const t = data.visitTypes[x.type];
+               return escapeHtml(x.store) + (t ? ' <span style="opacity:.7">(' +
+                      escapeHtml(t.label) + ')</span>' : '');
+             }).join(', ');
+    }).join('<br>');
+    html += '</div>';
   }
   return html;
 }
