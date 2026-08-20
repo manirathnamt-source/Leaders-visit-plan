@@ -1742,6 +1742,29 @@ function getAuditLog(rmName, monthOrRange) {
   };
 }
 
+/**
+ * Just the open-issue count for the Audit tab badge.
+ *
+ * Deriving the count needs the same comparison as the full audit, so there is
+ * no cheaper shortcut — but the client calls this in the background after the
+ * page has rendered, so nothing waits on it. Returns only a number, which
+ * keeps the payload tiny.
+ */
+function getAuditCount(caller, viewedRM, monthOrRange) {
+  const u = _assertCaller(caller);
+  if (!u) return { open: 0 };
+
+  const accessibleRMs = _accessibleRMs(u);
+  const accessibleCMs = _accessibleCMs(u);
+  const ok = _norm(u.canonicalName) === _norm(viewedRM) ||
+             accessibleRMs.some(function (r) { return _norm(r.name) === _norm(viewedRM); }) ||
+             accessibleCMs.some(function (c) { return _norm(c.name) === _norm(viewedRM); });
+  if (!ok) return { open: 0 };
+
+  const a = getAuditLog(viewedRM, monthOrRange);
+  return { open: a.summary.open, total: a.summary.total };
+}
+
 function _dateFromDay(month, day) {
   const [y, m] = month.split('-').map(Number);
   return y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');

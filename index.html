@@ -1509,12 +1509,40 @@ function loadDashboard(silent, part){
       if (d.travel)     renderTravel(d);
       if (d.audit)      renderAudit(d);
       $('refresh-status').textContent = 'Synced ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+      refreshAuditBadge();   // background, after the visible tab is on screen
     })
     .withFailureHandler(err => {
       $('refresh-status').textContent = 'Error';
       showToast('Error loading data: ' + err.message, 'error');
     })
     .getDashboardData(caller(), currentRM, currentMonth, currentRange, parts);
+}
+
+/**
+ * Fill the Audit tab's open-issue badge without blocking anything.
+ *
+ * The count needs the same work as the audit itself, so it is fetched in the
+ * background once the visible tab has rendered. If the audit payload is
+ * already loaded, renderAudit sets the badge and this does nothing.
+ */
+let auditCountKey = null;
+function refreshAuditBadge(){
+  if (!actor || !currentRM || !currentMonth) return;
+  if (currentData && currentData.audit) return;          // full audit already in hand
+  const key = currentRM + '|' +
+              (currentRange ? currentRange.from + '_' + currentRange.to : currentMonth);
+  if (auditCountKey === key) return;                     // asked for this already
+
+  google.script.run
+    .withSuccessHandler(res => {
+      auditCountKey = key;
+      const badge = $('audit-count');
+      if (!badge || !res) return;
+      if (res.open > 0){ badge.style.display = 'inline-block'; badge.textContent = res.open; }
+      else badge.style.display = 'none';
+    })
+    .withFailureHandler(() => {})   // a missing badge is not worth an error toast
+    .getAuditCount(caller(), currentRM, currentRange || currentMonth);
 }
 
 /**
@@ -2642,6 +2670,7 @@ let summaryCache  = null, summaryKey  = null;
 function clearTabCaches(){
   overviewCache = null; overviewKey = null;
   summaryCache  = null; summaryKey  = null;
+  auditCountKey = null;
   // Per-tab payloads are keyed to the RM, month and range, so when any of those
   // change the parts we are holding are stale. Drop them and let the visible
   // tab refetch; the rest reload as they are opened.
