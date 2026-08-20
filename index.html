@@ -308,6 +308,25 @@
   .tv .track i.plan{background:var(--primary)}
   .tv .track i.act{background:var(--success)}
   .tv .pending{grid-column:1/-1;font-size:11.5px;color:var(--muted)}
+  .tv .v.score.good{color:var(--success)} .tv .v.score.mid{color:var(--warning)}
+  .tv .v.score.bad{color:var(--danger)}
+  .tv .v.miss{color:var(--danger)}
+
+  /* rail cards are buttons — they open their detail popup */
+  .railbtn{display:block;width:100%;padding:0;text-align:left;font:inherit;color:inherit;
+      background:#fff;border:1px solid var(--border);border-radius:10px;cursor:pointer;
+      transition:border-color .12s,box-shadow .12s}
+  .railbtn:hover{border-color:var(--primary);box-shadow:0 3px 12px rgba(37,99,235,.14)}
+  .railbtn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+  .railbtn > h3{margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;
+      text-transform:uppercase;color:var(--muted);padding:10px 14px;
+      border-bottom:1px solid var(--border);display:flex;justify-content:space-between;
+      align-items:center;gap:8px}
+  .railbtn .go{font-weight:600;letter-spacing:0;text-transform:none;font-size:11.5px;
+      color:var(--primary)}
+  .railbtn:hover .go{text-decoration:underline}
+  /* the popup carries wide tables, so let it use the space */
+  .modal-dialog{min-width:min(720px,92vw)}
 
   /* stores needing a visit */
   .nv{max-height:322px;overflow-y:auto}
@@ -666,8 +685,6 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button>
     <button class="tab-btn"         data-tab="plan"    onclick="switchTab('plan')">📅 Visit Plan</button>
-    <button class="tab-btn"         data-tab="actual"  onclick="switchTab('actual')">✅ Planned vs Actual</button>
-    <button class="tab-btn"         data-tab="travel"  onclick="switchTab('travel')">🚗 Travel Log</button>
     <button class="tab-btn"         data-tab="audit"   onclick="switchTab('audit')">🔍 Audit <span id="audit-count" class="badge-count" style="display:none">0</span></button>
     <button class="tab-btn"         data-tab="summary" id="tab-summary" onclick="switchTab('summary')" style="display:none">📊 Summary</button>
   </div>
@@ -683,25 +700,9 @@
 
   <div class="panel other" id="panel-plan"><div id="visit-plan-container"><div class="empty">Loading…</div></div></div>
 
-  <div class="panel other" id="panel-actual">
-    <div id="top-perf-box"></div>
-    <div class="panel-head">
-      <h2>Planned vs Actual Visits</h2>
-      <small style="color:var(--muted)">Rows in red = missed visits</small>
-    </div>
-    <div id="actual-content"><div class="empty">Loading…</div></div>
-  </div>
+  
 
-  <div class="panel other" id="panel-travel">
-    <div class="panel-head">
-      <h2>Monthly Travel Log (Actual)</h2>
-      <div style="display:flex;gap:8px;align-items:center">
-        <small style="color:var(--muted)">Haversine · Outstation stores excluded</small>
-        <button class="btn-secondary" onclick="exportTravelCSV()">📥 Export CSV</button>
-      </div>
-    </div>
-    <div id="travel-content"><div class="empty">Loading…</div></div>
-  </div>
+  
 
   <div class="panel other" id="panel-audit">
     <div class="panel-head">
@@ -1540,7 +1541,7 @@ function onDailyModeChange(dateKey, mode){
 
 /* ============ LOAD DASHBOARD ============ */
 /** Which server-side part backs each tab. Overview and Summary fetch separately. */
-const TAB_PART = { plan:'plan', actual:'actual', travel:'travel', audit:'audit' };
+const TAB_PART = { plan:'plan', audit:'audit' };
 
 function activeTabName(){
   const b = document.querySelector('.tab-btn.active');
@@ -1582,11 +1583,10 @@ function loadDashboard(silent, part){
       const d = currentData;
       renderBaseStoreBar(d);
       if (d.plan)       renderVisitPlan(d);
-      if (d.comparison) renderComparison(d);
-      if (d.travel)     renderTravel(d);
       if (d.audit)      renderAudit(d);
       $('refresh-status').textContent = 'Synced ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
       refreshAuditBadge();   // background, after the visible tab is on screen
+      if (d.plan) ensureRailData();
     })
     .withFailureHandler(err => {
       $('refresh-status').textContent = 'Error';
@@ -1760,27 +1760,51 @@ function clearPlanDay(day){
   Object.keys(draftGrid).forEach(store => { delete draftGrid[store][day]; });
 }
 
-/** Shorten a store name for a narrow cell: "MGL - CITY CENTER MALL" -> "CITY CENTER MALL". */
-function shortStore(name){
+/**
+ * A short code for a calendar chip: "BLR - JAYANAGAR" -> "BLRJAY".
+ *
+ * Your swipe data already carries codes in brackets — "BLR - NEXUS KORAMANGALA
+ * MALL (BLRNKM)" — so use those when present. Otherwise build one from the city
+ * prefix plus the first three letters of the store, skipping filler words.
+ * The full name always stays in the chip's tooltip.
+ */
+const SKIP_WORDS = { THE:1, MALL:1, MAIN:1, NEW:1, OF:1, AND:1 };
+
+function storeCode(name){
   const s = String(name || '').trim();
-  const i = s.indexOf(' - ');
-  return (i > 0 && i <= 5) ? s.slice(i + 3) : s;
+  if (!s) return '';
+
+  const bracket = s.match(/\(([A-Za-z0-9]{2,8})\)/);
+  if (bracket) return bracket[1].toUpperCase();
+
+  const clean = s.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  const dash = clean.indexOf(' - ');
+  if (dash > 0 && dash <= 5){
+    const city = clean.slice(0, dash).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const rest = clean.slice(dash + 3).split(/\s+/)
+                      .filter(w => w && !SKIP_WORDS[w.toUpperCase()]);
+    const word = rest[0] || clean.slice(dash + 3);
+    return (city + word.replace(/[^A-Za-z0-9]/g, '').slice(0, 3)).toUpperCase();
+  }
+  return clean.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
 }
 
-/** Travel + conveyance for the rail. Planned always; actual once that tab is loaded. */
+/** Travel + conveyance summary. Click opens the full log with export. */
 function travelRailHtml(data){
   const k = data.planKPI || {};
-  const t = data.travel;              // only present after Travel Log has loaded
+  const t = data.travel;
   const plannedKM = Number(k.plannedKM || 0);
   const actualKM  = t ? Number(t.totalKM || 0) : null;
   const pct = (plannedKM > 0 && actualKM != null) ? Math.round((actualKM / plannedKM) * 100) : null;
 
-  let html = '<div class="pe-card"><h3>Travel &amp; conveyance</h3><div class="tv">';
+  let html = '<button type="button" class="pe-card railbtn" onclick="openTravelDetail()">' +
+             '<h3>Travel &amp; conveyance<span class="go">details ›</span></h3><div class="tv">';
   html += '<div class="m"><span class="l">Planned km</span><span class="v">' +
           plannedKM.toLocaleString('en-IN') + '</span><span class="s">this month</span></div>';
-  html += '<div class="m"><span class="l">Est. claim</span><span class="v money">' +
-          formatINR(k.travelReimb || 0) + '</span><span class="s">' +
-          escapeHtml(data.travelMode || 'Car') + '</span></div>';
+  html += '<div class="m"><span class="l">' + (t ? 'Claimable' : 'Est. claim') +
+          '</span><span class="v money">' +
+          formatINR(t ? (t.costEstimate || 0) : (k.travelReimb || 0)) + '</span><span class="s">' +
+          escapeHtml((t && t.defaultMode) || data.travelMode || 'Car') + '</span></div>';
 
   if (actualKM != null){
     html += '<div class="split">';
@@ -1790,12 +1814,36 @@ function travelRailHtml(data){
             (pct != null ? ' · ' + pct + '%' : '') + '</b></div>';
     html += '<div class="track"><i class="act" style="width:' +
             Math.min(100, pct == null ? 0 : pct) + '%"></i></div>';
-    html += '<div class="prow"><span>Claimable</span><b>' + formatINR(t.costEstimate || 0) + '</b></div>';
     html += '</div>';
   } else {
-    html += '<div class="pending">Actual km appear once you open Travel Log.</div>';
+    html += '<div class="pending">Loading actual km…</div>';
   }
-  return html + '</div></div>';
+  return html + '</div></button>';
+}
+
+/** Planned vs actual visits. Click opens the store-by-store breakdown. */
+function actualRailHtml(data){
+  const c = data.comparison;
+  let html = '<button type="button" class="pe-card railbtn" onclick="openActualDetail()">' +
+             '<h3>Planned vs actual<span class="go">details ›</span></h3><div class="tv">';
+  if (!c){
+    html += '<div class="pending" style="grid-column:1/-1">Loading…</div>';
+    return html + '</div></button>';
+  }
+  const k = c.kpi || {};
+  const pct = Number(k.completion || 0);
+  const cls = pct >= 100 ? 'good' : (pct >= 50 ? 'mid' : 'bad');
+  const missed = (c.rows || []).filter(r => r.missed).length;
+
+  html += '<div class="m"><span class="l">Completion</span><span class="v score ' + cls + '">' +
+          pct + '%</span><span class="s">' + (k.totalActual || 0) + ' of ' +
+          (k.totalPlanned || 0) + ' visits</span></div>';
+  html += '<div class="m"><span class="l">Missed</span><span class="v' +
+          (missed ? ' miss' : '') + '">' + missed + '</span><span class="s">store' +
+          (missed === 1 ? '' : 's') + ' short</span></div>';
+  html += '<div class="split"><div class="track"><i class="' +
+          (pct >= 100 ? 'act' : 'plan') + '" style="width:' + Math.min(100, pct) + '%"></i></div></div>';
+  return html + '</div></button>';
 }
 
 /** Mapped stores ordered by how long since anyone was there. */
@@ -1842,7 +1890,8 @@ function planCalendarHtml(data, locked){
   const lead = order.indexOf(days[0].weekday);
 
   let html = '<div class="sc"><div class="sc-rail">' +
-             travelRailHtml(data) + notVisitedRailHtml(data) + '</div>';
+             travelRailHtml(data) + actualRailHtml(data) +
+             notVisitedRailHtml(data) + '</div>';
 
   // ---- month ----
   html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
@@ -1892,11 +1941,11 @@ function monthCellHtml(data, dm, todayD){
     list.slice(0, 2).forEach(p => {
       const t = data.visitTypes[p.type];
       inner += '<span class="mchip rm" title="' + escapeHtml(p.store + (t ? ' — ' + t.label : '')) +
-               '">' + escapeHtml(shortStore(p.store)) + '</span>';
+               '">' + escapeHtml(storeCode(p.store)) + '</span>';
     });
     cmAll.slice(0, 1).forEach(c => {
       inner += '<span class="mchip cm" title="' + escapeHtml(c.who + ': ' + c.store) + '">' +
-               escapeHtml(shortStore(c.store)) + '</span>';
+               escapeHtml(storeCode(c.store)) + '</span>';
     });
     const extra = Math.max(0, list.length - 2) + Math.max(0, cmAll.length - 1);
     if (extra) inner += '<span class="more">+' + extra + ' more</span>';
@@ -1905,6 +1954,110 @@ function monthCellHtml(data, dm, todayD){
   return '<button type="button" class="' + cls + '" onclick="openPlanDay(' + dm.day + ')" ' +
          'title="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '">' +
          inner + '</button>';
+}
+
+/* ---- rail detail popups ---- */
+/**
+ * Travel and Planned-vs-Actual now live behind the rail cards rather than in
+ * their own tabs. Their data is fetched in the background once the plan is on
+ * screen, so the numbers are usually there before anyone clicks.
+ */
+function ensureRailData(){
+  if (!actor || !currentRM || !currentMonth) return;
+  if (currentData && currentData.travel && currentData.comparison) return;
+  const parts = [];
+  if (!currentData || !currentData.comparison) parts.push('actual');
+  if (!currentData || !currentData.travel)     parts.push('travel');
+  if (!parts.length) return;
+
+  google.script.run
+    .withSuccessHandler(data => {
+      if (!data || data.error) return;
+      Object.keys(data).forEach(k => { if (data[k] === null) delete data[k]; });
+      currentData = Object.assign({}, currentData || {}, data);
+      // Only repaint if the plan is still what the user is looking at.
+      if (activeTabName() === 'plan' && currentData.plan) renderVisitPlan(currentData);
+    })
+    .withFailureHandler(() => {})
+    .getDashboardData(caller(), currentRM, currentMonth, currentRange, parts);
+}
+
+function openTravelDetail(){
+  const t = currentData && currentData.travel;
+  if (!t){ showModal('Travel & conveyance', '<div class="empty">Loading…</div>'); ensureRailData(); return; }
+  showModal('Travel & conveyance · ' + monthLabel(currentData.month), travelDetailHtml(t));
+}
+
+function travelDetailHtml(t){
+  let html = '<div class="travel-summary">';
+  html += travelCard('total', 'Total Distance', t.totalKM + ' KM',
+            t.distanceSource === 'matrix' ? 'From Distance Calculator' : 'Straight-line estimate');
+  html += travelCard('days',  'Days Travelled', t.daysTravelled, 'Days with swipes');
+  html += travelCard('avg',   'Avg / Day',      t.avgPerDay + ' KM', 'Per travel day');
+  html += travelCard('cost',  'Claimable',      formatINR(t.costEstimate), 'At ' +
+            formatINR(t.defaultRate) + '/km');
+  html += '</div>';
+  html += '<div style="margin:0 0 12px"><button class="btn-secondary" onclick="exportTravelCSV()">' +
+          '📥 Export CSV</button></div>';
+
+  if (!t.baseStore){
+    html += '<div class="warning-box">⚠ <b>Base Store not set.</b> Travel is store-to-store only.</div>';
+  }
+  if (t.daily && t.daily.length){
+    html += '<div class="table-wrap"><table class="data"><thead><tr><th>Date</th>' +
+            '<th>KM</th><th>Mode</th><th>Cost</th></tr></thead><tbody>';
+    t.daily.forEach(d => {
+      html += '<tr class="' + (d.abnormal ? 'abnormal' : '') + '"><td>' + d.date + '</td><td>' +
+              d.km + '</td><td>' + (d.mode === 'Bike' ? '🏍️ Bike' : '🚗 Car') + '</td><td>' +
+              formatINR(d.cost) + '</td></tr>';
+    });
+    html += '<tr class="total-row"><td>TOTAL</td><td>' + t.totalKM + '</td><td></td><td>' +
+            formatINR(t.costEstimate) + '</td></tr></tbody></table></div>';
+  } else {
+    html += '<div class="empty">No travel recorded for this period.</div>';
+  }
+  return html;
+}
+
+function openActualDetail(){
+  const c = currentData && currentData.comparison;
+  if (!c){ showModal('Planned vs actual', '<div class="empty">Loading…</div>'); ensureRailData(); return; }
+  showModal('Planned vs actual · ' + monthLabel(currentData.month), actualDetailHtml(currentData));
+}
+
+function actualDetailHtml(data){
+  const c = data.comparison, k = c.kpi || {};
+  let html = '';
+  if (data.topPerformer){
+    html += '<div class="top-perf-banner">🏆 <b>Top Performer:</b> ' +
+            escapeHtml(data.topPerformer.rmName) + ' — ' + data.topPerformer.completion + '%</div>';
+  }
+  html += '<div style="margin:0 0 12px"><button class="btn-secondary" onclick="exportActualCSV()">' +
+          '📥 Export CSV</button></div>';
+  if (!c.rows || !c.rows.length) return html + '<div class="empty">No data for this period.</div>';
+
+  html += '<div class="table-wrap"><table class="data"><thead><tr><th>Store</th><th>Planned</th>' +
+          '<th>Actual</th><th>Completion</th></tr></thead><tbody>';
+  c.rows.forEach(r => {
+    const badge = r.completion >= 100 ? 'good' : (r.completion >= 50 ? 'mid' : 'bad');
+    html += '<tr class="' + (r.missed ? 'missed' : '') + '"><td>' + escapeHtml(r.storeName) +
+            '</td><td>' + r.planned + '</td><td>' + r.actual +
+            '</td><td><span class="badge ' + badge + '">' + r.completion + '%</span></td></tr>';
+  });
+  html += '<tr class="total-row"><td>TOTAL</td><td>' + (k.totalPlanned || 0) + '</td><td>' +
+          (k.totalActual || 0) + '</td><td>' + (k.completion || 0) + '%</td></tr>';
+  return html + '</tbody></table></div>';
+}
+
+function exportActualCSV(){
+  if (!currentData || !currentData.comparison) return;
+  const rows = [['Store','Planned','Actual','Completion %','Status']];
+  currentData.comparison.rows.forEach(r => {
+    rows.push([r.storeName, r.planned, r.actual, r.completion + '%', r.missed ? 'Missed' : 'On track']);
+  });
+  downloadCSV('PlannedVsActual_' + currentData.rmName.replace(/\s+/g, '_') + '_' +
+              rangeLabel() + '.csv', rows);
+  showToast('Exported', 'success');
 }
 
 /* ---- the day popup ---- */
@@ -2533,144 +2686,6 @@ function editPlan(){
 }
 
 /* ============ PLANNED VS ACTUAL RENDER ============ */
-function renderComparison(data){
-  const topBox = $('top-perf-box');
-  if (data.topPerformer){
-    topBox.innerHTML = '<div class="top-perf-banner">🏆 <b>Top Performer:</b> ' +
-      escapeHtml(data.topPerformer.rmName) + ' — ' + data.topPerformer.completion +
-      '% (' + data.topPerformer.totalActual + '/' + data.topPerformer.totalPlanned + ')</div>';
-  } else topBox.innerHTML = '';
-
-  const rows = data.comparison.rows;
-  const content = $('actual-content');
-  if (!rows || rows.length === 0){
-    content.innerHTML = '<div class="empty">No data available for this month.</div>';
-    return;
-  }
-  let html = '<div class="table-wrap"><table class="data">';
-  html += '<thead><tr><th>Store Name</th><th>Planned</th><th>Actual</th><th>Completion %</th><th>Status</th></tr></thead><tbody>';
-  rows.forEach(r => {
-    const cls = r.missed ? 'missed' : '';
-    const badgeClass = r.completion >= 100 ? 'good' : (r.completion >= 50 ? 'mid' : 'bad');
-    const statusTxt = r.missed ? '❌ Missed' : (r.planned === 0 ? '—' : '✅ On Track');
-    html += '<tr class="' + cls + '"><td>' + escapeHtml(r.storeName) + '</td><td>' +
-            r.planned + '</td><td>' + r.actual +
-            '</td><td><span class="badge ' + badgeClass + '">' + r.completion +
-            '%</span></td><td>' + statusTxt + '</td></tr>';
-  });
-  const k = data.comparison.kpi;
-  html += '<tr class="total-row"><td>TOTAL</td><td>' + k.totalPlanned +
-          '</td><td>' + k.totalActual + '</td><td>' + k.completion + '%</td><td></td></tr>';
-  html += '</tbody></table></div>';
-  content.innerHTML = html;
-}
-
-/* ============ TRAVEL LOG RENDER ============ */
-function renderTravel(data){
-  const t = data.travel;
-  const content = $('travel-content');
-  let html = '';
-  html += '<div class="travel-summary">';
-  html += travelCard('total', 'Total Distance', t.totalKM + ' KM',
-                    t.distanceSource === 'matrix' ? 'From Distance Calculator' :
-                    t.distanceSource === 'haversine-fallback' ? 'Some legs via Haversine' :
-                    'Straight-line × ' + (t.roadFactor || 1) + '×');
-  html += travelCard('days',  'Days Travelled', t.daysTravelled, 'Days with swipes');
-  html += travelCard('avg',   'Avg / Day',      t.avgPerDay + ' KM', 'Per travel day');
-  // Mode mix description for cost card: how many days Car vs Bike
-  const modeCount = { Car: 0, Bike: 0 };
-  (t.daily || []).forEach(d => { if (modeCount[d.mode] != null) modeCount[d.mode]++; });
-  let mixLabel = 'Default: ' + (t.defaultMode === 'Bike' ? '🏍️' : '🚗') +
-                 ' @ ' + formatINR(t.defaultRate) + '/km';
-  if (modeCount.Car > 0 && modeCount.Bike > 0){
-    mixLabel = '🚗 ' + modeCount.Car + 'd · 🏍️ ' + modeCount.Bike + 'd';
-  } else if (modeCount.Bike > 0 && modeCount.Car === 0){
-    mixLabel = '🏍️ Bike × ' + modeCount.Bike + ' days';
-  } else if (modeCount.Car > 0 && modeCount.Bike === 0){
-    mixLabel = '🚗 Car × ' + modeCount.Car + ' days';
-  }
-  html += travelCard('cost',  'Cost Estimate',  formatINR(t.costEstimate), mixLabel);
-  html += '</div>';
-
-  if (t.distanceSource === 'matrix'){
-    html += '<div style="font-size:12px;color:var(--success);margin-bottom:10px">' +
-            '✓ Distances read from your <b>Distance Calculator</b> sheet.</div>';
-  } else if (t.distanceSource === 'haversine-fallback'){
-    html += '<div style="font-size:12px;color:var(--warning);margin-bottom:10px">' +
-            '⚠ Some distances fell back to Haversine (× ' + t.roadFactor +
-            '). Check the Distance Calculator sheet for missing pairs.</div>';
-  } else if (t.roadFactor && t.roadFactor !== 1){
-    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' +
-            '📍 Distances are straight-line (Haversine) × <b>' + t.roadFactor +
-            '×</b> road factor. For exact distances, populate the Distance Calculator sheet.</div>';
-  }
-
-  if (!t.baseStore){
-    html += '<div class="warning-box">⚠ <b>Base Store not set.</b> Travel calculated store-to-store only.</div>';
-  }
-  if (t.missingCoords && t.missingCoords.length){
-    html += '<div class="warning-box">⚠ <b>Missing coordinates</b> for: ' +
-            t.missingCoords.map(escapeHtml).join(', ') + '. Add in <b>Store Master</b>.</div>';
-  }
-
-  if (t.daily && t.daily.length){
-    html += '<h3 style="margin:14px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Daily Totals</h3>';
-    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">' +
-            'Pick Car or Bike for each day — cost recalculates automatically. Unmarked days use the default mode.</div>';
-    html += '<div class="table-wrap"><table class="data">';
-    html += '<thead><tr><th>Date</th><th>Distance (KM)</th><th>Mode</th><th>Rate ₹/km</th><th>Cost ₹</th><th>Status</th></tr></thead><tbody>';
-    const canEditMode = isRM() && actor && currentRM &&
-                        String(currentRM).trim().toLowerCase() ===
-                        String(actor.name).trim().toLowerCase();
-    let totalDayCost = 0;
-    t.daily.forEach(d => {
-      totalDayCost += d.cost || 0;
-      const dropdownId = 'mode-' + d.date.replace(/-/g,'');
-      const modeCell = canEditMode
-        ? '<select id="' + dropdownId + '" class="day-mode-select" ' +
-          'onchange="onDailyModeChange(\'' + d.date + '\', this.value)">' +
-          '<option value="Car"'  + (d.mode === 'Car'  ? ' selected' : '') + '>🚗 Car</option>' +
-          '<option value="Bike"' + (d.mode === 'Bike' ? ' selected' : '') + '>🏍️ Bike</option>' +
-          '</select>' +
-          (d.hasOverride ? '' : ' <span style="font-size:10px;color:var(--muted)" title="Using default mode">·</span>')
-        : (d.mode === 'Bike' ? '🏍️ Bike' : '🚗 Car');
-      html += '<tr class="' + (d.abnormal ? 'abnormal' : '') + '">' +
-              '<td>' + d.date + '</td>' +
-              '<td>' + d.km + '</td>' +
-              '<td>' + modeCell + '</td>' +
-              '<td>' + formatINR(d.rate) + '</td>' +
-              '<td>' + formatINR(d.cost) + '</td>' +
-              '<td>' + (d.abnormal
-                ? '<span class="badge warn">⚠ Abnormal (>' + t.abnormalThreshold + ' km)</span>'
-                : '<span class="badge good">Normal</span>') + '</td></tr>';
-    });
-    html += '<tr class="total-row"><td>TOTAL</td><td>' + t.totalKM +
-            '</td><td></td><td></td><td>' + formatINR(totalDayCost) + '</td><td></td></tr>';
-    html += '</tbody></table></div>';
-  }
-
-  if (!t.log || t.log.length === 0){
-    html += '<div class="empty">No store-to-store movement recorded this month.</div>';
-    content.innerHTML = html; return;
-  }
-  html += '<h3 style="margin:18px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Detailed Movement</h3>';
-  html += '<div class="table-wrap"><table class="data">';
-  html += '<thead><tr><th>Date</th><th>From Store</th><th>To Store</th><th>Distance (KM)</th></tr></thead><tbody>';
-  t.log.forEach(leg => {
-    const cls = leg.isBase ? 'row-base' : '';
-    // BASE badge on From for the opening (base → first store) leg
-    // RETURN badge on To for the closing (last store → base) leg
-    const fromBadge = (leg.isBase && !leg.isReturn) ? ' <span class="badge base">BASE</span>' : '';
-    const toBadge   = leg.isReturn ? ' <span class="badge base">RETURN</span>' : '';
-    html += '<tr class="' + cls + '"><td>' + leg.date + '</td><td>' +
-            escapeHtml(leg.fromStore) + fromBadge +
-            '</td><td>' + escapeHtml(leg.toStore) + toBadge + '</td><td>' + leg.distance +
-            (leg.missing ? ' <span style="color:var(--warning)">⚠</span>' : '') + '</td></tr>';
-  });
-  html += '<tr class="total-row"><td colspan="3">TOTAL</td><td>' + t.totalKM + '</td></tr>';
-  html += '</tbody></table></div>';
-  content.innerHTML = html;
-}
 function travelCard(cls, label, value, sub){
   return '<div class="travel-card ' + cls + '">' +
          '<div class="label">' + label + '</div>' +
