@@ -1613,39 +1613,16 @@ function renderVisitPlan(data){
     c.innerHTML = html; return;
   }
 
-  // Editable plans use the calendar; locked ones keep the wide grid, which is
-  // good for reading a whole month at once even though it was painful to edit.
-  if (!effectivelyLocked){
-    html += planCalendarHtml(data);
-    html += planMonthSummaryHtml(data);
-    html += planSubmitBarHtml(data, canEditPlan, effectivelyLocked);
-    html += baseStoreFooterHtml(data, canEditPlan);
-    c.innerHTML = html;
-    return;
-  }
-
-  html += '<div class="vp-grid-wrap"><table class="vp-grid"><thead><tr>';
-  html += '<th class="sticky-col" style="min-width:170px;text-align:left;padding-left:10px">Store Name</th>';
-  html += '<th class="sticky-col col2" style="min-width:120px;text-align:left;padding-left:10px">CM</th>';
-  data.dayMeta.forEach(dm => {
-    html += '<th class="day-header' + (dm.weekend ? ' weekend' : '') + '">' +
-            dm.day + '<small>' + dm.weekday + '</small></th>';
-  });
-  html += '</tr></thead><tbody>';
-
-  data.stores.forEach(store => {
-    html += storeRowHtml(store.storeName, store.cmName, data, effectivelyLocked, false);
-  });
-  for (let i = 0; i < data.additionalRowCount; i++){
-    const chosen = additionalStores[i] || '';
-    html += additionalRowHtml(i, chosen, data, effectivelyLocked);
-  }
-  html += itineraryRowsHtml(data);
-  html += '</tbody></table></div>';
-
+  // One layout, always. Locked plans show the same calendar read-only rather
+  // than swapping to the wide grid — the screen changing shape after you submit
+  // was disorienting, and the grid meant scrolling both ways to read anything.
+  html += planCalendarHtml(data, effectivelyLocked);
+  html += planMonthSummaryHtml(data);
   html += planSubmitBarHtml(data, canEditPlan, effectivelyLocked);
   html += baseStoreFooterHtml(data, canEditPlan);
   c.innerHTML = html;
+  return;
+
 }
 
 /* ============ CALENDAR PLAN ENTRY ============
@@ -1703,7 +1680,7 @@ function clearPlanDay(day){
   Object.keys(draftGrid).forEach(store => { delete draftGrid[store][day]; });
 }
 
-function planCalendarHtml(data){
+function planCalendarHtml(data, locked){
   const days = data.dayMeta || [];
   if (!days.length) return '<div class="empty">No days in this month.</div>';
   if (!planDayMeta(data, selectedPlanDay)) selectedPlanDay = days[0].day;
@@ -1716,7 +1693,9 @@ function planCalendarHtml(data){
 
   // ---- month ----
   html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
-          '<span class="hint">click a date to plan it</span></h3><div class="pe-cal">';
+          '<span class="hint">' + (locked ? 'locked — click a date to view it'
+                                          : 'click a date to plan it') +
+          '</span></h3><div class="pe-cal">';
   html += '<div class="pe-dow">' + order.map(d => '<span>' + d + '</span>').join('') + '</div>';
   html += '<div class="pe-grid">';
   for (let b = 0; b < (lead < 0 ? 0 : lead); b++) html += '<div class="pe-day blank"></div>';
@@ -1751,13 +1730,13 @@ function planCalendarHtml(data){
 
   // ---- selected day ----
   html += '<div class="pe-card"><h3>Selected day</h3><div class="pe-edit" id="pe-edit">' +
-          planDayEditorHtml(data) + '</div></div>';
+          planDayEditorHtml(data, locked) + '</div></div>';
 
   html += '</div>';
   return html;
 }
 
-function planDayEditorHtml(data){
+function planDayEditorHtml(data, locked){
   const dm = planDayMeta(data, selectedPlanDay);
   if (!dm) return '';
   const list = planVisitsOn(selectedPlanDay);
@@ -1770,10 +1749,20 @@ function planDayEditorHtml(data){
 
   // store + visit type + add
   const stores = (data.stores || []).filter(s => s.storeName);
-  if (stores.length){
+  if (!locked && stores.length){
+    // Stores outside the user's mapping stay available as additional visits,
+    // which the old grid offered through its "Additional Visit" rows.
+    const mine = {};
+    stores.forEach(s => { mine[s.storeName] = 1; });
+    const others = (data.allStores || []).filter(s => !mine[s]);
     html += '<div class="pe-row"><select id="pe-store">' +
+            '<optgroup label="My stores">' +
             stores.map(s => '<option value="' + escapeHtml(s.storeName) + '">' +
                             escapeHtml(s.storeName) + '</option>').join('') +
+            '</optgroup>' +
+            (others.length ? '<optgroup label="Other stores (additional visit)">' +
+              others.map(s => '<option value="' + escapeHtml(s) + '">' +
+                              escapeHtml(s) + '</option>').join('') + '</optgroup>' : '') +
             '</select><select id="pe-type" style="max-width:130px">' +
             Object.keys(data.visitTypes).filter(code => !OFF_DAY_TYPES[code] && data.visitTypes[code].isVisit)
               .map(code => '<option value="' + code + '">' +
@@ -1787,11 +1776,20 @@ function planDayEditorHtml(data){
       const t = data.visitTypes[p.type];
       return '<li><span><span class="pn">' + escapeHtml(p.store) + '</span>' +
              '<span class="pt">' + escapeHtml(t ? t.label : p.type) + '</span></span>' +
-             '<button class="pe-x" title="Remove" onclick="removePlanVisit(\'' +
-             escapeHtml(p.store).replace(/'/g, "\\'") + '\')">&times;</button></li>';
+             (locked ? '' :
+               '<button class="pe-x" title="Remove" onclick="removePlanVisit(\'' +
+               escapeHtml(p.store).replace(/'/g, "\\'") + '\')">&times;</button>') +
+             '</li>';
     }).join('') + '</ul>';
   } else {
-    html += '<p class="pe-none">No stores added yet.</p>';
+    html += '<p class="pe-none">' +
+            (locked ? (off ? escapeHtml(OFF_DAY_TYPES[off]) : 'No visits planned for this day.')
+                    : 'No stores added yet.') + '</p>';
+  }
+
+  if (locked){
+    // Nothing editable below this point once a plan is submitted.
+    return html + counterpartBlockHtml(data);
   }
 
   html += '<div class="pe-offlabel">Or mark the whole day as</div>';
@@ -1808,7 +1806,15 @@ function planDayEditorHtml(data){
           '<button type="button" class="pe-off" onclick="applyOffRange()">Apply</button>' +
           '</div>';
 
-  // Where the counterpart is that day. Always shown when one exists — "nothing
+  return html + counterpartBlockHtml(data);
+}
+
+/**
+ * Where the other side of your stores is on the selected day. Always shown
+ * when a counterpart exists — "nothing planned" is as useful as a store list.
+ */
+function counterpartBlockHtml(data){
+  let html = '';
   // planned" is as useful to know as a list of stores.
   const itin = data.itinerary;
   const others = counterpartsOn(data, selectedPlanDay);
@@ -2260,15 +2266,17 @@ function onAdditionalStoreChange(idx, storeName){
 function submitPlan(){
   const cells = [];
   const mappedStoreNames = new Set(currentData.stores.map(s => s.storeName));
-  const additionalSet = new Set(additionalStores.filter(Boolean));
   Object.keys(draftGrid).forEach(store => {
-    const isAdd = additionalSet.has(store);
+    // Anything outside the user's mapping is an additional visit. The old grid
+    // only accepted those through its four fixed "Additional Visit" rows and
+    // dropped anything else; the calendar lets you pick any store, so treat
+    // membership of the mapping as the only test.
     const isMapped = mappedStoreNames.has(store);
-    if (!isMapped && !isAdd) return;
+    const isAdd = !isMapped;
     Object.keys(draftGrid[store]).forEach(d => {
       cells.push({
         storeName: store, day: Number(d),
-        visitType: draftGrid[store][d], isAdditional: isAdd && !isMapped
+        visitType: draftGrid[store][d], isAdditional: isAdd
       });
     });
   });
