@@ -1291,37 +1291,109 @@ function _prevMonth(ym) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
+// ======= SUBMISSION DEADLINE =======
 /**
- * The previous month's plan for a user, so the UI can pre-fill a new month
- * instead of making them re-enter a route they repeat every cycle.
- *
- * Returns the raw grid; the client decides what to keep. Off-days are included
- * but the client drops them, because a Week Off copied by date number would
- * land on the wrong weekday.
+ * A month's plan is due on the 25th of the month before it — September's plan
+ * must be locked by 25 August. Returns 'YYYY-MM-25'.
  */
-function getPreviousPlan(caller, rmName, month) {
+const PLAN_DUE_DAY = 25;
+
+function _planDueDate(month) {
+  return _prevMonth(month) + '-' + String(PLAN_DUE_DAY).padStart(2, '0');
+}
+
+/** Whole days from today to a 'YYYY-MM-DD' date. Negative once it has passed. */
+function _daysUntil(dateStr) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const p = dateStr.split('-').map(Number);
+  const target = new Date(p[0], p[1] - 1, p[2]);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+/**
+ * Where a user stands against the deadline for one month.
+ * `state` is one of: locked | due | overdue.
+ */
+function _planStatus(plan, month) {
+  const dueDate  = _planDueDate(month);
+  const daysLeft = _daysUntil(dueDate);
+  const locked   = !!(plan && plan.locked);
+  return {
+    dueDate     : dueDate,
+    dueDay      : PLAN_DUE_DAY,
+    daysLeft    : daysLeft,
+    locked      : locked,
+    submittedOn : (plan && plan.submittedOn) || null,
+    state       : locked ? 'locked' : (daysLeft < 0 ? 'overdue' : 'due')
+  };
+}
+
+/**
+ * Admin view: who has not locked their plan for a month.
+ * Answers "who do I chase" rather than leaving it to be discovered later.
+ */
+function getPlanCompliance(caller, month) {
   const u = _assertCaller(caller);
   if (!u) return { error: 'Not authenticated.' };
-
-  const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf) return { error: 'You can only copy into your own plan.' };
+  if (u.role !== ROLES.ADMIN) return { error: 'Admin only.' };
   if (!/^\d{4}-\d{2}$/.test(month)) return { error: 'Invalid month.' };
 
-  const prev = _prevMonth(month);
-  const plan = getVisitPlan(rmName, prev);
-  let visits = 0;
-  Object.keys(plan.grid).forEach(function (s) {
-    Object.keys(plan.grid[s]).forEach(function (d) {
-      const vt = plan.grid[s][d];
-      if (VISIT_TYPES[vt] && VISIT_TYPES[vt].isVisit) visits++;
-    });
+  const dueDate  = _planDueDate(month);
+  const daysLeft = _daysUntil(dueDate);
+
+  // Everyone who is expected to submit a plan: RMs and CMs alike.
+  const people = [];
+  const seen = {};
+  _values(SHEETS.USERS).slice(1).forEach(function (r) {
+    const name = String(r[0] || '').trim();
+    if (!name) return;
+    const role = _canonicalRole(r[1] || '');
+    if (role !== ROLES.RM && role !== ROLES.CM) return;
+    const k = _norm(name);
+    if (seen[k]) return;
+    seen[k] = 1;
+    people.push({ name: name, role: role, cluster: String(r[2] || '').trim() });
   });
 
+  const rows = people.map(function (p) {
+    const plan = getVisitPlan(p.name, month);
+    let visits = 0;
+    Object.keys(plan.grid).forEach(function (s) {
+      Object.keys(plan.grid[s]).forEach(function (d) {
+        const vt = plan.grid[s][d];
+        if (VISIT_TYPES[vt] && VISIT_TYPES[vt].isVisit) visits++;
+      });
+    });
+    return {
+      name       : p.name,
+      role       : p.role,
+      cluster    : p.cluster,
+      locked     : !!plan.locked,
+      submittedOn: plan.submittedOn || null,
+      visits     : visits,
+      started    : visits > 0
+    };
+  });
+
+  // Worst first: nothing at all, then started-but-unlocked, then submitted.
+  rows.sort(function (a, b) {
+    if (a.locked !== b.locked) return a.locked ? 1 : -1;
+    if (a.started !== b.started) return a.started ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const pending = rows.filter(function (r) { return !r.locked; });
   return {
-    month      : prev,
-    grid       : plan.grid,
-    visitCount : visits,
-    daysInMonth: _daysInMonth(prev)
+    month     : month,
+    dueDate   : dueDate,
+    daysLeft  : daysLeft,
+    overdue   : daysLeft < 0,
+    total     : rows.length,
+    submitted : rows.length - pending.length,
+    pending   : pending.length,
+    notStarted: pending.filter(function (r) { return !r.started; }).length,
+    rows      : rows
   };
 }
 
@@ -2214,6 +2286,7 @@ function getDashboardData(caller, viewedRM, month, range, parts) {
     allStores,
     plan, planKPI, comparison, travel, audit,
     parts: Object.keys(want),
+    planStatus: want.plan ? _planStatus(plan, month) : null,
     itinerary: want.plan ? getItineraryRows(rmName, month) : null,
     topPerformer: top,
     range: effectiveRange ? { from: effectiveRange.from, to: effectiveRange.to,

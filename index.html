@@ -273,6 +273,15 @@
   .day-cell.type-L{background:#fb8c00}
   .day-cell.type-WO{background:#616161}
   .day-cell.type-WOH{background:#9e9e9e;background-image:linear-gradient(135deg,#9e9e9e 50%,#cfcfcf 50%)}
+  /* ---- submission deadline: plans are due on the 25th of the month before ---- */
+  .due{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:11px 16px;
+       border-radius:10px;font-size:13.5px;box-shadow:var(--shadow-sm)}
+  .due .ico{font-size:18px;line-height:1}
+  .due b{font-weight:700}
+  .due.overdue{background:#fce7ec;color:#be123c;border:1.5px solid #f4a3b5}
+  .due.soon   {background:#fbf0dc;color:#b45309;border:1px solid #eccb92}
+  .due.locked {background:#dcf2ef;color:#0f766e;border:1px solid #9ed8d0}
+
   /* ================= CALENDAR PLAN ENTRY =================
      Replaces the stores x 31-days grid while a plan is editable. The grid
      required scrolling in both directions to set a single day; this keeps the
@@ -1599,6 +1608,8 @@ function renderVisitPlan(data){
   html += kpiCard('reimb',   'Travel Reimb ₹',  kpi.travelReimb.toLocaleString('en-IN'));
   html += '</div>';
 
+  html += deadlineBannerHtml(data, canEditPlan);
+
   html += '<div class="vp-legend">';
   Object.keys(data.visitTypes).forEach(code => {
     const t = data.visitTypes[code];
@@ -2106,6 +2117,40 @@ function storeAbbr(name){
   return s.split(/[\s\-,\/]+/)[0].slice(0, 4).toUpperCase();
 }
 
+/**
+ * The 25th rule, stated plainly at the top of the plan.
+ *
+ * A month's plan is due on the 25th of the month before, so September is due
+ * by 25 August. Red once that date has passed — the whole point is that a
+ * missed deadline is impossible to skim past.
+ */
+function deadlineBannerHtml(data, canEditPlan){
+  const st = data.planStatus;
+  if (!st) return '';
+
+  const due = formatDatePretty(st.dueDate);
+  if (st.locked){
+    return '<div class="due locked"><span class="ico">✓</span><span><b>Submitted.</b> ' +
+           'Locked on ' + escapeHtml(st.submittedOn || '—') + '.</span></div>';
+  }
+  // Someone viewing another person's unsubmitted plan should see it, not be nagged.
+  const who = canEditPlan ? 'Your plan for ' : escapeHtml(data.rmName) + '’s plan for ';
+  const act = canEditPlan ? ' Lock it so your visits and conveyance are counted.' : '';
+
+  if (st.daysLeft < 0){
+    const ago = Math.abs(st.daysLeft);
+    return '<div class="due overdue"><span class="ico">⚠</span><span><b>Not submitted.</b> ' +
+           who + escapeHtml(monthLabel(data.month)) + ' was due <b>' + escapeHtml(due) +
+           '</b> — that was ' + ago + ' day' + (ago === 1 ? '' : 's') + ' ago.' + act +
+           '</span></div>';
+  }
+  const left = st.daysLeft === 0 ? 'today' : st.daysLeft + ' day' +
+               (st.daysLeft === 1 ? '' : 's') + ' left';
+  return '<div class="due soon"><span class="ico">🕑</span><span><b>Not submitted yet.</b> ' +
+         who + escapeHtml(monthLabel(data.month)) + ' is due <b>' + escapeHtml(due) +
+         '</b> · ' + left + '.</span></div>';
+}
+
 function kpiCard(cls, label, value){
   return '<div class="vp-kpi ' + cls + '"><span class="label">' + label +
          '</span><div class="value">' + value + '</div></div>';
@@ -2600,6 +2645,7 @@ function loadSummary(){
   if (summaryCache && summaryKey === key){
     currentSummary = summaryCache;
     renderSummary(summaryCache);
+    loadCompliance();
     return;
   }
 
@@ -2614,6 +2660,7 @@ function loadSummary(){
       currentSummary = res;
       summaryCache = res; summaryKey = key;
       renderSummary(res);
+      loadCompliance();
     })
     .withFailureHandler(err => {
       $('summary-content').innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
@@ -2621,9 +2668,70 @@ function loadSummary(){
     .getScopeSummary(caller(), currentRange || currentMonth, selectedCluster || '');
 }
 
+/**
+ * Admin: who has not locked a plan for the month being viewed.
+ * Loaded after the summary renders so it never delays it.
+ */
+let complianceKey = null;
+function loadCompliance(){
+  if (!isAdmin() || !currentMonth) return;
+  const key = currentMonth;
+  if (complianceKey === key) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || res.error) return;
+      complianceKey = key;
+      const box = $('compliance-box');
+      if (box) box.innerHTML = complianceHtml(res);
+    })
+    .withFailureHandler(() => {})
+    .getPlanCompliance(caller(), currentMonth);
+}
+
+function complianceHtml(c){
+  if (!c.rows || !c.rows.length) return '';
+  const cls = c.pending === 0 ? 'locked' : (c.overdue ? 'overdue' : 'soon');
+  const due = formatDatePretty(c.dueDate);
+
+  let head;
+  if (c.pending === 0){
+    head = '<span class="ico">✓</span><span><b>All ' + c.total + ' submitted</b> for ' +
+           escapeHtml(monthLabel(c.month)) + '.</span>';
+  } else if (c.overdue){
+    head = '<span class="ico">⚠</span><span><b>' + c.pending + ' of ' + c.total +
+           ' have not submitted</b> ' + escapeHtml(monthLabel(c.month)) +
+           ' — due ' + escapeHtml(due) + ', ' + Math.abs(c.daysLeft) + ' days ago.' +
+           (c.notStarted ? ' <b>' + c.notStarted + '</b> have not started at all.' : '') +
+           '</span>';
+  } else {
+    head = '<span class="ico">🕑</span><span><b>' + c.pending + ' of ' + c.total +
+           ' still to submit</b> for ' + escapeHtml(monthLabel(c.month)) +
+           ' · due ' + escapeHtml(due) + '.</span>';
+  }
+
+  let html = '<div class="due ' + cls + '">' + head + '</div>';
+  if (c.pending === 0) return html;
+
+  html += '<div class="table-wrap" style="margin-bottom:16px"><table class="data">' +
+          '<thead><tr><th>Name</th><th>Role</th><th>Cluster</th><th>Status</th>' +
+          '<th>Entries</th></tr></thead><tbody>';
+  c.rows.filter(r => !r.locked).forEach(r => {
+    html += '<tr class="' + (r.started ? 'sev-medium' : 'sev-high') + '">' +
+            '<td><b>' + escapeHtml(r.name) + '</b></td>' +
+            '<td>' + escapeHtml(r.role) + '</td>' +
+            '<td>' + escapeHtml(r.cluster || '—') + '</td>' +
+            '<td>' + (r.started
+              ? '<span class="badge medium">Draft, not locked</span>'
+              : '<span class="badge high">Not started</span>') + '</td>' +
+            '<td>' + (r.visits || 0) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function renderSummary(s){
   const content = $('summary-content');
-  let html = '';
+  let html = '<div id="compliance-box"></div>';
 
   // KPI cards
   html += '<div class="summary-kpi">';
@@ -2679,6 +2787,7 @@ function clearTabCaches(){
   overviewCache = null; overviewKey = null;
   summaryCache  = null; summaryKey  = null;
   auditCountKey = null;
+  complianceKey = null;
   // Per-tab payloads are keyed to the RM, month and range, so when any of those
   // change the parts we are holding are stale. Drop them and let the visible
   // tab refetch; the rest reload as they are opened.
