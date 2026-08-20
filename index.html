@@ -169,21 +169,13 @@
   .vp-month-row .month-pick{background:#fef7e0;border:1px solid #f9ab00;border-radius:4px;padding:5px 10px;font-weight:600;color:#5f4b00}
   .vp-subtitle{color:var(--primary-dark);font-weight:500}
 
-  .vp-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);background:var(--card);border-bottom:1px solid var(--border)}
-  .vp-kpi{padding:12px 14px;border-right:1px solid var(--border);text-align:center;position:relative}
-  .vp-kpi:last-child{border-right:none}
-  .vp-kpi::before{content:'';position:absolute;left:0;right:0;top:0;height:3px}
-  .vp-kpi .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 0;border-radius:5px;margin-bottom:5px;display:block;color:#fff}
-  .vp-kpi .value{font-size:23px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
-  .vp-kpi.total   .label{background:var(--c-blue)}    .vp-kpi.total::before{background:var(--c-blue)}
-  .vp-kpi.covered .label{background:var(--c-emerald)} .vp-kpi.covered::before{background:var(--c-emerald)}
-  .vp-kpi.cm      .label{background:var(--c-violet)}  .vp-kpi.cm::before{background:var(--c-violet)}
-  .vp-kpi.notvis  .label{background:var(--c-rose)}    .vp-kpi.notvis::before{background:var(--c-rose)}
-  .vp-kpi.reimb   .label{background:var(--c-amber)}   .vp-kpi.reimb::before{background:var(--c-amber)}
 
-  .vp-legend{background:var(--card);padding:8px 12px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px}
-  .legend-item{display:flex;align-items:center;padding:2px 6px;gap:4px}
-  .legend-badge{display:inline-block;min-width:28px;padding:2px 6px;border-radius:3px;color:#fff;font-weight:700;font-size:11px;text-align:center}
+
+
+
+  
+  
+  
 
   .vp-grid-wrap{background:var(--card);overflow:auto;max-height:calc(100vh - 300px);min-height:400px;border-bottom-left-radius:10px;border-bottom-right-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
   .vp-grid{border-collapse:collapse;font-size:12px;min-width:100%}
@@ -1638,7 +1630,6 @@ function ensureTabData(tab){
 /* ============ VISIT PLAN RENDER ============ */
 function renderVisitPlan(data){
   const c = $('visit-plan-container');
-  const kpi = data.planKPI;
   // Non-RM actors never edit, so effectively locked
   // Editable only when: viewing self, plan not locked, and user is RM or CM.
   // Admin viewing is always read-only here (Admin uses the override tool in Phase 5).
@@ -1668,24 +1659,9 @@ function renderVisitPlan(data){
           ' additional &nbsp;|&nbsp; ' + data.dayMeta.length + ' days</span>';
   html += '</div>';
 
-  html += '<div class="vp-kpi-row">';
-  html += kpiCard('total',   'Total Visits',    kpi.totalVisits);
-  html += kpiCard('covered', 'Stores Covered',  kpi.storesCovered + '/' + kpi.totalStores);
-  html += kpiCard('cm',      'CM Accompany',    kpi.cmAccompany);
-  html += kpiCard('notvis',  'Not Visited',     kpi.notVisited);
-  html += kpiCard('reimb',   'Travel Reimb ₹',  kpi.travelReimb.toLocaleString('en-IN'));
-  html += '</div>';
-
+  // The KPI strip and the visit-type legend are gone: the rail carries the
+  // numbers that matter, and the calendar chips name their own visit type.
   html += deadlineBannerHtml(data, canEditPlan);
-
-  html += '<div class="vp-legend">';
-  Object.keys(data.visitTypes).forEach(code => {
-    const t = data.visitTypes[code];
-    html += '<span class="legend-item">' +
-            '<span class="legend-badge" style="background:' + t.color + '">' + code + '</span>' +
-            '<span>' + t.label + '</span></span>';
-  });
-  html += '</div>';
 
   if (!data.stores.length){
     html += '<div class="empty">No stores mapped to this RM.</div>';
@@ -2476,11 +2452,6 @@ function deadlineBannerHtml(data, canEditPlan){
   return '<div class="due soon"><span class="ico">🕑</span><span><b>Not submitted yet.</b> ' +
          who + escapeHtml(monthLabel(data.month)) + ' is due <b>' + escapeHtml(due) +
          '</b> · ' + left + '.</span></div>';
-}
-
-function kpiCard(cls, label, value){
-  return '<div class="vp-kpi ' + cls + '"><span class="label">' + label +
-         '</span><div class="value">' + value + '</div></div>';
 }
 
 function storeRowHtml(storeName, cmName, data, locked, isAdditional){
