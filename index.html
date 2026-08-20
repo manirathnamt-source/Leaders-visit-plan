@@ -286,6 +286,76 @@
      Replaces the stores x 31-days grid while a plan is editable. The grid
      required scrolling in both directions to set a single day; this keeps the
      month and the day editor on screen together. */
+  /* single screen: rail of context on the left, month in the middle */
+  .sc{display:grid;grid-template-columns:296px 1fr;gap:12px;align-items:start;
+      padding:14px;background:var(--card)}
+  @media (max-width:940px){ .sc{grid-template-columns:1fr} }
+  .sc-rail{display:flex;flex-direction:column;gap:12px}
+
+  /* travel + conveyance */
+  .tv{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .tv .m{display:flex;flex-direction:column;gap:1px}
+  .tv .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .tv .v{font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .tv .s{font-size:11px;color:var(--muted)}
+  .tv .v.money{color:var(--success)}
+  .tv .split{grid-column:1/-1;border-top:1px solid var(--border);padding-top:9px;
+      display:flex;flex-direction:column;gap:6px}
+  .tv .prow{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+  .tv .prow b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+  .tv .track{height:7px;border-radius:5px;background:#e6ebf4;overflow:hidden}
+  .tv .track i{display:block;height:100%}
+  .tv .track i.plan{background:var(--primary)}
+  .tv .track i.act{background:var(--success)}
+  .tv .pending{grid-column:1/-1;font-size:11.5px;color:var(--muted)}
+
+  /* stores needing a visit */
+  .nv{max-height:322px;overflow-y:auto}
+  .nv ul{margin:0;padding:0;list-style:none}
+  .nv li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+      padding:8px 14px;border-bottom:1px solid var(--border)}
+  .nv li:last-child{border-bottom:none}
+  .nv .s{font-weight:600;font-size:12.5px;line-height:1.25}
+  .nv .d{font-weight:700;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .nv .d.hot{color:var(--danger)} .nv .d.mid{color:var(--warning)} .nv .d.ok{color:var(--muted)}
+  .nv .d.never{color:var(--danger)}
+
+  /* month cells carry store names, not just dots */
+  .cellgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .mc{min-height:76px;border:1px solid var(--border);border-radius:9px;background:#fff;
+      padding:5px 6px;display:flex;flex-direction:column;gap:3px;cursor:pointer;font:inherit;
+      color:inherit;text-align:left;transition:border-color .12s,box-shadow .12s,transform .12s}
+  .mc:hover{border-color:var(--primary);box-shadow:0 3px 10px rgba(37,99,235,.16);transform:translateY(-1px)}
+  .mc:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+  .mc.blank{border:none;background:transparent;cursor:default;min-height:0}
+  .mc .dn{font-size:12px;font-weight:700;color:var(--muted)}
+  .mc.we .dn{color:var(--danger)}
+  .mc.today{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+  .mc .tag{align-self:flex-start;font-size:9.5px;font-weight:700;letter-spacing:.04em;
+      text-transform:uppercase;background:#eceff4;color:var(--muted);border-radius:5px;padding:1px 5px}
+  .mchip{font-size:10px;font-weight:600;border-radius:5px;padding:2px 5px;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .mchip.rm{background:#dbe6fb;color:var(--primary-dark)}
+  .mchip.cm{background:#fbe8fb;color:#a21caf}
+  .mc .more{font-size:9.5px;color:var(--muted)}
+
+  /* day popup */
+  .lane h4{margin:0 0 7px;font-size:10.5px;font-weight:700;letter-spacing:.07em;
+      text-transform:uppercase;display:flex;align-items:center;gap:7px}
+  .lane.rm h4{color:var(--primary)} .lane.cm h4{color:#a21caf}
+  .lane h4 .dot{width:8px;height:8px;border-radius:50%}
+  .lane.rm h4 .dot{background:var(--primary)} .lane.cm h4 .dot{background:#a21caf}
+  .lane + .lane{margin-top:14px}
+  .lane ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+  .lane li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 11px;
+      border-radius:9px;background:#f8fafc;border:1px solid var(--border)}
+  .lane .sn{font-weight:600;font-size:12.5px}
+  .lane .ty{display:block;font-size:11px;color:var(--muted);font-weight:400}
+  .lane .none{font-size:12px;color:var(--muted);padding:8px 11px;border-radius:9px;
+      background:#f8fafc;border:1px dashed var(--border)}
+  .together{margin-top:14px;background:#dcf2ef;color:#0f766e;border-radius:9px;padding:9px 12px;
+      font-size:12px;font-weight:600}
+
   .pe{display:grid;grid-template-columns:1fr 370px;gap:14px;align-items:start;
       padding:14px;background:var(--card)}
   @media (max-width:900px){ .pe{grid-template-columns:1fr} }
@@ -299,25 +369,23 @@
   .pe-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px}
   .pe-dow span{text-align:center;font-size:10px;font-weight:700;letter-spacing:.05em;
       text-transform:uppercase;color:var(--muted)}
-  .pe-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-  .pe-day{aspect-ratio:1/1;border:1px solid var(--border);border-radius:7px;background:#fff;
-      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-      cursor:pointer;font:inherit;color:inherit;padding:2px;transition:border-color .12s,background .12s}
-  .pe-day:hover{border-color:var(--primary);background:#e8f0fe}
-  .pe-day:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-  .pe-day.blank{border:none;background:transparent;cursor:default}
-  .pe-day .n{font-size:12.5px;font-weight:600}
-  .pe-day.we .n{color:var(--danger)}
-  .pe-day .dots{display:flex;gap:2px;min-height:5px}
-  .pe-day .dot{width:4px;height:4px;border-radius:50%;background:var(--primary)}
+  
+  
+  
+  
+  
+  
+  
+  
+  
   /* second row of dots = where the counterpart (CM for an RM) is that day */
-  .pe-day .dots.cm{min-height:4px}
-  .pe-day .dots.cm .dot{width:4px;height:4px;background:#d01884}
-  .pe-day.has{background:#e8f0fe;border-color:#9dbdf5}
-  .pe-day.sel{border-color:var(--primary);border-width:2px;background:#d2e3fc}
-  .pe-day.off{background:#eceff4}
-  .pe-day.off .n{color:var(--muted)}
-  .pe-day .tag{font-size:8.5px;font-weight:700;color:var(--muted)}
+  
+  
+  
+  
+  
+  
+  
 
   .pe-edit{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
   .pe-title{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
@@ -1627,6 +1695,7 @@ function renderVisitPlan(data){
   // One layout, always. Locked plans show the same calendar read-only rather
   // than swapping to the wide grid — the screen changing shape after you submit
   // was disorienting, and the grid meant scrolling both ways to read anything.
+  planDayLocked = effectivelyLocked;
   html += planCalendarHtml(data, effectivelyLocked);
   html += planMonthSummaryHtml(data);
   html += planSubmitBarHtml(data, canEditPlan, effectivelyLocked);
@@ -1691,6 +1760,78 @@ function clearPlanDay(day){
   Object.keys(draftGrid).forEach(store => { delete draftGrid[store][day]; });
 }
 
+/** Shorten a store name for a narrow cell: "MGL - CITY CENTER MALL" -> "CITY CENTER MALL". */
+function shortStore(name){
+  const s = String(name || '').trim();
+  const i = s.indexOf(' - ');
+  return (i > 0 && i <= 5) ? s.slice(i + 3) : s;
+}
+
+/** Travel + conveyance for the rail. Planned always; actual once that tab is loaded. */
+function travelRailHtml(data){
+  const k = data.planKPI || {};
+  const t = data.travel;              // only present after Travel Log has loaded
+  const plannedKM = Number(k.plannedKM || 0);
+  const actualKM  = t ? Number(t.totalKM || 0) : null;
+  const pct = (plannedKM > 0 && actualKM != null) ? Math.round((actualKM / plannedKM) * 100) : null;
+
+  let html = '<div class="pe-card"><h3>Travel &amp; conveyance</h3><div class="tv">';
+  html += '<div class="m"><span class="l">Planned km</span><span class="v">' +
+          plannedKM.toLocaleString('en-IN') + '</span><span class="s">this month</span></div>';
+  html += '<div class="m"><span class="l">Est. claim</span><span class="v money">' +
+          formatINR(k.travelReimb || 0) + '</span><span class="s">' +
+          escapeHtml(data.travelMode || 'Car') + '</span></div>';
+
+  if (actualKM != null){
+    html += '<div class="split">';
+    html += '<div class="prow"><span>Planned</span><b>' + plannedKM.toLocaleString('en-IN') + ' km</b></div>';
+    html += '<div class="track"><i class="plan" style="width:100%"></i></div>';
+    html += '<div class="prow"><span>Actual</span><b>' + actualKM.toLocaleString('en-IN') + ' km' +
+            (pct != null ? ' · ' + pct + '%' : '') + '</b></div>';
+    html += '<div class="track"><i class="act" style="width:' +
+            Math.min(100, pct == null ? 0 : pct) + '%"></i></div>';
+    html += '<div class="prow"><span>Claimable</span><b>' + formatINR(t.costEstimate || 0) + '</b></div>';
+    html += '</div>';
+  } else {
+    html += '<div class="pending">Actual km appear once you open Travel Log.</div>';
+  }
+  return html + '</div></div>';
+}
+
+/** Mapped stores ordered by how long since anyone was there. */
+function notVisitedRailHtml(data){
+  const rows = (data.stores || [])
+    .filter(s => s.storeName && s.mapped !== false)
+    .slice()
+    .sort((a, b) => {
+      const an = a.daysSinceLastVisit == null, bn = b.daysSinceLastVisit == null;
+      if (an !== bn) return an ? -1 : 1;                 // never visited first
+      if (an && bn) return a.storeName.localeCompare(b.storeName);
+      return b.daysSinceLastVisit - a.daysSinceLastVisit;
+    });
+  const overdue = rows.filter(s => s.daysSinceLastVisit == null || s.daysSinceLastVisit > 30).length;
+
+  let html = '<div class="pe-card"><h3>Since last visit' +
+             (overdue ? '<span class="badge bad">' + overdue + ' over 30d</span>' : '') +
+             '</h3><div class="nv"><ul>';
+  if (!rows.length){
+    html += '<li><span class="s" style="color:var(--muted)">No mapped stores.</span></li>';
+  }
+  rows.forEach(s => {
+    const d = s.daysSinceLastVisit;
+    let cls = 'ok', txt;
+    if (d == null){ cls = 'never'; txt = 'Never'; }
+    else if (d > 30){ cls = 'hot'; txt = d + ' d'; }
+    else if (d > 14){ cls = 'mid'; txt = d + ' d'; }
+    else txt = d + ' d';
+    html += '<li><span class="s">' + escapeHtml(s.storeName) + '</span>' +
+            '<span class="d ' + cls + '" title="' +
+            (s.lastVisitDate ? 'Last visit ' + escapeHtml(s.lastVisitDate) : 'No swipe on record') +
+            '">' + txt + '</span></li>';
+  });
+  return html + '</ul></div></div>';
+}
+
 function planCalendarHtml(data, locked){
   const days = data.dayMeta || [];
   if (!days.length) return '<div class="empty">No days in this month.</div>';
@@ -1700,7 +1841,8 @@ function planCalendarHtml(data, locked){
   const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const lead = order.indexOf(days[0].weekday);
 
-  let html = '<div class="pe">';
+  let html = '<div class="sc"><div class="sc-rail">' +
+             travelRailHtml(data) + notVisitedRailHtml(data) + '</div>';
 
   // ---- month ----
   html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
@@ -1708,43 +1850,80 @@ function planCalendarHtml(data, locked){
                                           : 'click a date to plan it') +
           '</span></h3><div class="pe-cal">';
   html += '<div class="pe-dow">' + order.map(d => '<span>' + d + '</span>').join('') + '</div>';
-  html += '<div class="pe-grid">';
-  for (let b = 0; b < (lead < 0 ? 0 : lead); b++) html += '<div class="pe-day blank"></div>';
+  html += '<div class="cellgrid">';
+  for (let b = 0; b < (lead < 0 ? 0 : lead); b++) html += '<div class="mc blank"></div>';
+
+  const todayD = todayDayOfMonth(data.month);
   days.forEach(dm => {
-    const list = planVisitsOn(dm.day);
-    const off  = planOffOn(dm.day);
-    const cls = 'pe-day' + (dm.weekend ? ' we' : '') + (list.length ? ' has' : '') +
-                (off ? ' off' : '') + (dm.day === selectedPlanDay ? ' sel' : '');
-    let dots = '';
-    for (let i = 0; i < Math.min(list.length, 4); i++) dots += '<span class="dot"></span>';
-
-    // pink dots underneath = counterpart visits, so days you overlap stand out
-    let cmCount = 0;
-    counterpartsOn(data, dm.day).forEach(c => { cmCount += c.stores.length; });
-    let cmDots = '';
-    for (let i = 0; i < Math.min(cmCount, 4); i++) cmDots += '<span class="dot"></span>';
-
-    const title = dm.day + ' ' + dm.weekday +
-      (list.length ? ' — ' + list.length + ' of yours' : '') +
-      (cmCount ? ' — ' + cmCount + ' by your ' + ((data.itinerary && data.itinerary.counterRole) || 'CM') : '');
-
-    html += '<button type="button" class="' + cls + '" onclick="selectPlanDay(' + dm.day + ')" ' +
-            'title="' + escapeHtml(title) + '" ' +
-            'aria-label="' + escapeHtml(title) + '">' +
-            '<span class="n">' + dm.day + '</span>' +
-            (off ? '<span class="tag">' + escapeHtml(off) + '</span>'
-                 : '<span class="dots">' + dots + '</span>' +
-                   (cmDots ? '<span class="dots cm">' + cmDots + '</span>' : '')) +
-            '</button>';
+    html += monthCellHtml(data, dm, todayD);
   });
-  html += '</div></div></div>';
+  html += '</div></div></div>';   // cellgrid, pe-cal, pe-card
 
-  // ---- selected day ----
-  html += '<div class="pe-card"><h3>Selected day</h3><div class="pe-edit" id="pe-edit">' +
-          planDayEditorHtml(data, locked) + '</div></div>';
-
-  html += '</div>';
+  html += '</div>';               // sc
   return html;
+}
+
+/** Which day of this month is today, or 0 if we are looking at another month. */
+function todayDayOfMonth(month){
+  const now = new Date();
+  const ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  return ym === month ? now.getDate() : 0;
+}
+
+/** One date square: your visits as blue chips, the counterpart's as pink. */
+function monthCellHtml(data, dm, todayD){
+  const list = planVisitsOn(dm.day);
+  const off  = planOffOn(dm.day);
+  const cps  = counterpartsOn(data, dm.day);
+  let cmAll = [];
+  cps.forEach(c => { c.stores.forEach(x => cmAll.push({ who: c.name, store: x.store, type: x.type })); });
+
+  const cls = 'mc' + (dm.weekend ? ' we' : '') + (dm.day === todayD ? ' today' : '');
+  const title = dm.day + ' ' + dm.weekday +
+    (off ? ' — ' + OFF_DAY_TYPES[off]
+         : (list.length ? ' — ' + list.length + ' yours' : '') +
+           (cmAll.length ? ' — ' + cmAll.length + ' ' +
+             ((data.itinerary && data.itinerary.counterRole) || 'CM') : ''));
+
+  let inner = '<span class="dn">' + dm.day + '</span>';
+  if (off){
+    inner += '<span class="tag">' + escapeHtml(OFF_DAY_TYPES[off]) + '</span>';
+  } else {
+    list.slice(0, 2).forEach(p => {
+      const t = data.visitTypes[p.type];
+      inner += '<span class="mchip rm" title="' + escapeHtml(p.store + (t ? ' — ' + t.label : '')) +
+               '">' + escapeHtml(shortStore(p.store)) + '</span>';
+    });
+    cmAll.slice(0, 1).forEach(c => {
+      inner += '<span class="mchip cm" title="' + escapeHtml(c.who + ': ' + c.store) + '">' +
+               escapeHtml(shortStore(c.store)) + '</span>';
+    });
+    const extra = Math.max(0, list.length - 2) + Math.max(0, cmAll.length - 1);
+    if (extra) inner += '<span class="more">+' + extra + ' more</span>';
+  }
+
+  return '<button type="button" class="' + cls + '" onclick="openPlanDay(' + dm.day + ')" ' +
+         'title="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '">' +
+         inner + '</button>';
+}
+
+/* ---- the day popup ---- */
+let planDayLocked = false;
+
+function openPlanDay(day){
+  selectedPlanDay = day;
+  const dm = planDayMeta(currentData, day);
+  showModal((dm ? dm.weekday + ' ' + day : 'Day ' + day) + ' ' +
+            monthLabel(currentData.month), planDayEditorHtml(currentData, planDayLocked));
+}
+
+/** Repaint the month behind the popup and the popup itself after an edit. */
+function refreshPlanDay(){
+  renderVisitPlan(currentData);
+  const body = $('modal-body');
+  if (body && $('app-modal') && $('app-modal').classList.contains('open')){
+    body.innerHTML = planDayEditorHtml(currentData, planDayLocked);
+  }
 }
 
 function planDayEditorHtml(data, locked){
@@ -1919,11 +2098,6 @@ function planMonthSummaryHtml(data){
   return html;
 }
 
-function selectPlanDay(day){
-  selectedPlanDay = day;
-  renderVisitPlan(currentData);
-}
-
 function addPlanVisit(){
   markPlanDirty();
   const store = $('pe-store') ? $('pe-store').value : '';
@@ -1933,13 +2107,13 @@ function addPlanVisit(){
   if (planOffOn(selectedPlanDay)) clearPlanDay(selectedPlanDay);
   if (!draftGrid[store]) draftGrid[store] = {};
   draftGrid[store][selectedPlanDay] = type;
-  renderVisitPlan(currentData);
+  refreshPlanDay();
 }
 
 function removePlanVisit(store){
   markPlanDirty();
   if (draftGrid[store]) delete draftGrid[store][selectedPlanDay];
-  renderVisitPlan(currentData);
+  refreshPlanDay();
 }
 
 /**
@@ -1970,7 +2144,7 @@ function applyOffRange(){
     applied++;
   }
   markPlanDirty();
-  renderVisitPlan(currentData);
+  refreshPlanDay();
   showToast(OFF_DAY_TYPES[code] + ' applied to ' + applied + ' more day' +
             (applied === 1 ? '' : 's') +
             (hadVisits ? ' · ' + hadVisits + ' had visits, which were removed' : ''), 'success');
@@ -1988,7 +2162,7 @@ function setPlanOffDay(code){
       draftGrid[first.storeName][selectedPlanDay] = code;
     }
   }
-  renderVisitPlan(currentData);
+  refreshPlanDay();
 }
 
 /* Submit / lock / admin-reset bar. Shared by the calendar and the locked grid. */
@@ -2293,7 +2467,7 @@ function onCellChange(sel){
   if (!draftGrid[store]) draftGrid[store] = {};
   if (val) draftGrid[store][day] = val;
   else delete draftGrid[store][day];
-  renderVisitPlan(currentData);
+  refreshPlanDay();
 }
 
 function onAdditionalStoreChange(idx, storeName){
@@ -2304,7 +2478,7 @@ function onAdditionalStoreChange(idx, storeName){
     delete draftGrid[old];
   }
   additionalStores[idx] = storeName;
-  renderVisitPlan(currentData);
+  refreshPlanDay();
 }
 
 /* ============ SUBMIT / EDIT ============ */
