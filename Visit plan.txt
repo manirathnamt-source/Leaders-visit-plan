@@ -587,9 +587,12 @@ function _accessibleCMs(user) {
   const sd = _values(SHEETS.STORE_MAPPING);
   const cmsFound = new Set();
   for (let i = 1; i < sd.length; i++) {
-    if (_norm(sd[i][1]) !== _norm(user.canonicalName)) continue;   // col B = RM Name
+    if (!_samePerson(sd[i][1], user.canonicalName)) continue;       // col B = RM Name
     const cmName = String(sd[i][2] || '').trim();                   // col C = CM Name
-    if (cmName) cmsFound.add(_norm(cmName));
+    // Resolve the short form to the Users-sheet name, which is what plans are
+    // filed under. Without this the CM's plan is looked up under a name that
+    // has no rows.
+    if (cmName) cmsFound.add(_norm(_canonicalPerson(cmName)));
   }
 
   // Return CMs from our directory that appear in Store Mapping for this RM.
@@ -599,10 +602,11 @@ function _accessibleCMs(user) {
   cmsFound.forEach(k => {
     if (cmDirectory[k]) out.push(cmDirectory[k]);
     else {
-      // Look up original (proper-case) spelling from Store Mapping
+      // Not in the Users sheet — surface the Store Mapping spelling so the RM
+      // can at least see the pairing exists.
       for (let i = 1; i < sd.length; i++) {
-        if (_norm(sd[i][2]) === k) {
-          out.push({ name: String(sd[i][2]).trim(), cluster: String(sd[i][3] || '').trim() });
+        if (_norm(_canonicalPerson(sd[i][2])) === k) {
+          out.push({ name: _canonicalPerson(sd[i][2]), cluster: String(sd[i][3] || '').trim() });
           break;
         }
       }
@@ -700,8 +704,9 @@ function getStoresForRM(userName) {
       mapped   : true
     };
     if (!row.storeName) continue;
-    if (_norm(data[i][1]) === target) rmList.push(row);
-    if (_norm(data[i][2]) === target) cmList.push(row);
+    // Short forms in Store Mapping must still match the signed-in name.
+    if (_samePerson(data[i][1], userName)) rmList.push(row);
+    if (_samePerson(data[i][2], userName)) cmList.push(row);
   }
   // Prefer RM match if it has any rows, else fall back to CM match.
   const baseList = rmList.length ? rmList : cmList;
@@ -763,6 +768,59 @@ function _getLastVisitDates(userName) {
     }
   }
   return out;
+}
+
+// ======= NAME RESOLUTION =======
+/**
+ * Store Mapping writes people's names in short form — "Kanagarathinam",
+ * "Mudassir" — while Users and Visit Plan carry the full one, "P
+ * Kanagarathinam", "Mudassir Quadri". Matching on the raw string meant an RM's
+ * CM resolved to a name no plan was ever filed under, so their visits never
+ * appeared.
+ *
+ * Resolve any spelling to the Users-sheet name: exact match first, then a
+ * unique match on significant name tokens. Initials are ignored, and an
+ * ambiguous short form is left alone rather than guessed at.
+ */
+function _personIndex() {
+  if (_MEMO.personIdx) return _MEMO.personIdx;
+  const byKey = {}, byToken = {};
+  _values(SHEETS.USERS).slice(1).forEach(function (r) {
+    const name = String(r[0] || '').trim();
+    if (!name) return;
+    byKey[_norm(name)] = name;
+    _norm(name).split(/\s+/).forEach(function (tok) {
+      if (tok.length < 4) return;                 // skip initials like "p"
+      if (!byToken[tok]) byToken[tok] = [];
+      if (byToken[tok].indexOf(name) < 0) byToken[tok].push(name);
+    });
+  });
+  _MEMO.personIdx = { byKey: byKey, byToken: byToken };
+  return _MEMO.personIdx;
+}
+
+function _canonicalPerson(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const idx = _personIndex();
+  const k = _norm(raw);
+  if (idx.byKey[k]) return idx.byKey[k];
+
+  const toks = k.split(/\s+/).filter(function (t) { return t.length >= 4; });
+  if (!toks.length) return raw;
+
+  let cands = null;
+  toks.forEach(function (t) {
+    const list = idx.byToken[t] || [];
+    cands = (cands === null) ? list.slice()
+                             : cands.filter(function (x) { return list.indexOf(x) >= 0; });
+  });
+  return (cands && cands.length === 1) ? cands[0] : raw;
+}
+
+/** Do two spellings refer to the same person? */
+function _samePerson(a, b) {
+  return _norm(_canonicalPerson(a)) === _norm(_canonicalPerson(b));
 }
 
 // ======= STORE CODES =======
@@ -1254,10 +1312,9 @@ function _computePlannedKM(rmName, grid) {
 function _rmsForCM(cmName) {
   const sd = _values(SHEETS.STORE_MAPPING);
   const found = {};
-  const target = _norm(cmName);
   for (let i = 1; i < sd.length; i++) {
-    if (_norm(sd[i][2]) !== target) continue;      // col C = CM Name
-    const rm = String(sd[i][1] || '').trim();      // col B = RM Name
+    if (!_samePerson(sd[i][2], cmName)) continue;   // col C = CM Name, short form tolerated
+    const rm = _canonicalPerson(sd[i][1]);          // col B = RM Name
     if (rm) found[_norm(rm)] = rm;
   }
   return Object.keys(found).map(k => found[k]).sort();
