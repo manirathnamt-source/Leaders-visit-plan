@@ -2086,9 +2086,17 @@ function getOverviewData(caller, viewedUser, fyStart) {
  *           analytics tabs (Planned vs Actual, Travel Log, Audit, Top Performer).
  *           Omit / null = defaults to the full month.
  */
-function getDashboardData(caller, viewedRM, month, range) {
+function getDashboardData(caller, viewedRM, month, range, parts) {
   const u = _assertCaller(caller);
   if (!u) return { error: 'Not authenticated.' };
+
+  // `parts` lets the client ask for only the tab it is showing. People use this
+  // one tab at a time — plan, then planned vs actual, then travel for their
+  // conveyance claim — so computing all four on every load was three quarters
+  // wasted. Omitted or empty means everything, which keeps older callers working.
+  const want = {};
+  (Array.isArray(parts) && parts.length ? parts : ['plan','actual','travel','audit'])
+    .forEach(function (p) { want[p] = true; });
 
   // Permission: viewedRM must be one of the users this caller can see.
   // That includes RMs they manage and CMs under them (for RMs).
@@ -2106,15 +2114,17 @@ function getDashboardData(caller, viewedRM, month, range) {
 
   const rmName = viewedRM;
   let stores       = getStoresForRM(rmName);
-  const plan        = getVisitPlan(rmName, month);       // Always monthly
-  const planKPI     = getPlanKPIs(rmName, month);        // Always monthly
-  const comparison  = getPlannedVsActual(rmName, effectiveRange);
-  const travel      = getTravelLog(rmName, effectiveRange);
-  const audit       = getAuditLog(rmName, effectiveRange);
-  const top         = getTopPerformer(effectiveRange);
+  const plan        = want.plan   ? getVisitPlan(rmName, month) : null;   // always monthly
+  const planKPI     = want.plan   ? getPlanKPIs(rmName, month)  : null;
+  const comparison  = want.actual ? getPlannedVsActual(rmName, effectiveRange) : null;
+  const travel      = want.travel ? getTravelLog(rmName, effectiveRange)       : null;
+  const audit       = want.audit  ? getAuditLog(rmName, effectiveRange)        : null;
+  // The top-performer banner sits on Planned vs Actual, so only that tab needs it.
+  const top         = want.actual ? getTopPerformer(effectiveRange) : null;
   const baseStore   = getBaseStore(rmName);
   const travelMode  = getTravelMode(rmName);
-  const allStores   = getAllStoreNames();
+  // Only the plan grid offers the "additional visit" store picker.
+  const allStores   = want.plan ? getAllStoreNames() : [];
   const uniqueCMs   = Array.from(new Set(stores.map(s => s.cmName).filter(Boolean))).sort();
 
   // Enrich each store with lastVisitDate + daysSinceLastVisit.
@@ -2180,7 +2190,8 @@ function getDashboardData(caller, viewedRM, month, range) {
     additionalRowCount: ADDITIONAL_VISIT_ROWS,
     allStores,
     plan, planKPI, comparison, travel, audit,
-    itinerary: getItineraryRows(rmName, month),
+    parts: Object.keys(want),
+    itinerary: want.plan ? getItineraryRows(rmName, month) : null,
     topPerformer: top,
     range: effectiveRange ? { from: effectiveRange.from, to: effectiveRange.to,
                               spansMultipleMonths: effectiveRange.months.length > 1,

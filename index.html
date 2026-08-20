@@ -1203,7 +1203,8 @@ function switchTab(tab){
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   $('panel-' + tab).classList.add('active');
   if (tab === 'summary') loadSummary();
-  if (tab === 'overview') loadOverview();
+  else if (tab === 'overview') loadOverview();
+  else ensureTabData(tab);
 }
 function showSummaryView(){ switchTab('summary'); }
 
@@ -1401,7 +1402,7 @@ function saveBaseStore(){
   google.script.run
     .withSuccessHandler(res => {
       btn.disabled = false; btn.textContent = 'Save';
-      if (res.success){ planDirty = false; showToast(res.message, 'success'); loadDashboard(); }
+      if (res.success){ planDirty = false; clearTabCaches(); showToast(res.message, 'success'); loadDashboard(); }
       else showToast(res.message, 'error');
     })
     .withFailureHandler(err => {
@@ -1461,15 +1462,35 @@ function onDailyModeChange(dateKey, mode){
 }
 
 /* ============ LOAD DASHBOARD ============ */
-function loadDashboard(silent){
+/** Which server-side part backs each tab. Overview and Summary fetch separately. */
+const TAB_PART = { plan:'plan', actual:'actual', travel:'travel', audit:'audit' };
+
+function activeTabName(){
+  const b = document.querySelector('.tab-btn.active');
+  return b ? b.dataset.tab : 'plan';
+}
+
+/**
+ * Fetch just the part the visible tab needs.
+ * Pass an explicit part (or 'all') to override; parts already fetched for this
+ * RM+month+range are merged, so moving between tabs accumulates rather than
+ * refetching.
+ */
+function loadDashboard(silent, part){
   if (!actor || !currentRM || !currentMonth) return;
+  const tab = activeTabName();
+  const want = part || TAB_PART[tab] || 'plan';
+  const parts = (want === 'all') ? ['plan','actual','travel','audit'] : [want];
   if (!silent) $('refresh-status').textContent = 'Refreshing…';
 
   google.script.run
     .withSuccessHandler(data => {
       if (data && data.error){ showToast(data.error, 'error'); return; }
       const keepDraft = planDirty;      // a background refresh must never eat edits
-      currentData = data;
+      // Merge: keep parts fetched earlier so switching tabs does not blank them.
+      const prev = currentData || {};
+      Object.keys(data).forEach(k => { if (data[k] === null) delete data[k]; });
+      currentData = Object.assign({}, prev, data);
       if (!keepDraft){
         draftGrid = {};
         Object.keys(data.plan.grid || {}).forEach(s => {
@@ -1480,18 +1501,33 @@ function loadDashboard(silent){
         planDirty = false;
       }
 
-      renderBaseStoreBar(data);
-      renderVisitPlan(data);
-      renderComparison(data);
-      renderTravel(data);
-      renderAudit(data);
+      // Render only what we now hold — a missing part means that tab was not asked for.
+      const d = currentData;
+      renderBaseStoreBar(d);
+      if (d.plan)       renderVisitPlan(d);
+      if (d.comparison) renderComparison(d);
+      if (d.travel)     renderTravel(d);
+      if (d.audit)      renderAudit(d);
       $('refresh-status').textContent = 'Synced ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     })
     .withFailureHandler(err => {
       $('refresh-status').textContent = 'Error';
       showToast('Error loading data: ' + err.message, 'error');
     })
-    .getDashboardData(caller(), currentRM, currentMonth, currentRange);
+    .getDashboardData(caller(), currentRM, currentMonth, currentRange, parts);
+}
+
+/**
+ * Opening a tab fetches its data if we do not already hold it. Parts stay in
+ * currentData for the session, so going back to a tab is instant.
+ */
+function ensureTabData(tab){
+  const part = TAB_PART[tab];
+  if (!part || !currentData) return;
+  const held = { plan: currentData.plan, actual: currentData.comparison,
+                 travel: currentData.travel, audit: currentData.audit };
+  if (held[part]) return;                 // already fetched
+  loadDashboard(true, part);
 }
 
 /* ============ VISIT PLAN RENDER ============ */
@@ -2234,7 +2270,7 @@ function editPlan(){
   if (!confirm('Unlock the current plan for editing?\nThis will delete the saved plan and let you submit a new one.')) return;
   google.script.run
     .withSuccessHandler(res => {
-      if (res.success){ planDirty = false; showToast('Plan unlocked.', 'success'); loadDashboard(); }
+      if (res.success){ planDirty = false; clearTabCaches(); showToast('Plan unlocked.', 'success'); loadDashboard(); }
       else showToast(res.message || 'Could not unlock plan.', 'error');
     })
     .withFailureHandler(err => showToast('Error: ' + err.message, 'error'))
@@ -2606,6 +2642,14 @@ let summaryCache  = null, summaryKey  = null;
 function clearTabCaches(){
   overviewCache = null; overviewKey = null;
   summaryCache  = null; summaryKey  = null;
+  // Per-tab payloads are keyed to the RM, month and range, so when any of those
+  // change the parts we are holding are stale. Drop them and let the visible
+  // tab refetch; the rest reload as they are opened.
+  if (currentData){
+    delete currentData.plan; delete currentData.planKPI; delete currentData.itinerary;
+    delete currentData.comparison; delete currentData.travel; delete currentData.audit;
+    delete currentData.topPerformer;
+  }
 }
 
 /**
