@@ -765,6 +765,35 @@ function _getLastVisitDates(userName) {
   return out;
 }
 
+// ======= STORE CODES =======
+/**
+ * The short store codes that already exist in your data, taken from the
+ * bracketed suffix on RM Login Logout's Store Name column — for example
+ * "BLR - NEXUS KORAMANGALA MALL (BLRNKM)" gives BLRNKM.
+ *
+ * Only real codes are returned. A store with no bracketed code gets no entry,
+ * and the UI falls back to its name rather than inventing something.
+ *
+ * Keyed by _storeKey so it matches however the name is spelled elsewhere.
+ */
+function _storeCodeMap() {
+  if (_MEMO.storeCodes) return _MEMO.storeCodes;
+  const map = {};
+  const sd = _values(SHEETS.LOGIN_LOGOUT);
+  for (let i = 1; i < sd.length; i++) {
+    const raw = String(sd[i][LC.STORE_NAME] || '').trim();
+    if (!raw) continue;
+    const m = raw.match(/\(([^)]+)\)\s*$/);
+    if (!m) continue;
+    const code = m[1].trim();
+    if (!code) continue;
+    const key = _storeKey(raw);          // strips the bracket, lowercases
+    if (key && !map[key]) map[key] = code;
+  }
+  _MEMO.storeCodes = map;
+  return map;
+}
+
 // ======= STORE MASTER =======
 /**
  * Returns store coord/type map keyed by normalized store key (_storeKey).
@@ -2287,6 +2316,7 @@ function getDashboardData(caller, viewedRM, month, range, parts) {
     plan, planKPI, comparison, travel, audit,
     parts: Object.keys(want),
     planStatus: want.plan ? _planStatus(plan, month) : null,
+    storeCodes: want.plan ? _storeCodeMap() : null,
     itinerary: want.plan ? getItineraryRows(rmName, month) : null,
     topPerformer: top,
     range: effectiveRange ? { from: effectiveRange.from, to: effectiveRange.to,
