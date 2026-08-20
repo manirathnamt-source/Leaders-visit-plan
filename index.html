@@ -325,6 +325,11 @@
       cursor:pointer;padding:2px 5px;border-radius:5px}
   .pe-x:hover{background:#fce8e6;color:var(--danger)}
   .pe-none{color:var(--muted);font-size:12px;padding:4px 0}
+  .pe-offlabel{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+      color:var(--muted);padding-top:6px;border-top:1px solid var(--border)}
+  .pe-range{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;
+      color:var(--muted)}
+  .pe-range select{padding:4px 6px;font-size:11.5px;border-radius:6px}
   .pe-offs{display:flex;gap:5px;flex-wrap:wrap;padding-top:2px}
   .pe-off{font:inherit;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;
       border:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer}
@@ -661,6 +666,7 @@ let isSubmitting = false;
 let draftGrid = {};
 let additionalStores = [];
 let selectedPlanDay = 1;   // which date the calendar editor is showing
+let planDirty = false;     // unsubmitted edits exist — never reload over them
 
 /* ============ RANGE HELPERS ============ */
 function daysInMonthYM(ym){
@@ -788,6 +794,7 @@ function selectMonth(ym){
   currentRange = fullMonthRange(ym);
   draftGrid = {};
   additionalStores = [];
+  planDirty = false;
   const mp = $('month-picker');
   if (mp) mp.value = ym;
   renderMonthButtons();
@@ -1180,7 +1187,7 @@ function onRMChange(){
 function doLogout(){
   stopAutoRefresh();
   actor = null; currentData = null; accessibleRMs = []; accessibleCMs = []; currentRM = null;
-  draftGrid = {}; additionalStores = [];
+  draftGrid = {}; additionalStores = []; planDirty = false;
   $('login-name').value = '';
   $('login-designation').value = 'RM';
   $('login-error').textContent = '';
@@ -1203,7 +1210,7 @@ function showSummaryView(){ switchTab('summary'); }
 function onMonthChange(){
   currentMonth = $('month-picker').value;
   clearTabCaches();
-  draftGrid = {}; additionalStores = [];
+  draftGrid = {}; additionalStores = []; planDirty = false;
   // Reset range to the new full month. RM can widen/narrow it afterwards.
   currentRange = fullMonthRange(currentMonth);
   syncRangeInputs();
@@ -1360,11 +1367,18 @@ function startAutoRefresh(){
   }, 30000);
 }
 function stopAutoRefresh(){ if (refreshTimer){ clearInterval(refreshTimer); refreshTimer = null; } }
+/**
+ * True when the user has edits that are not yet submitted.
+ *
+ * This used to start with `if (!isRM()) return false`, which meant a CM or an
+ * Admin was reported as having nothing unsaved — so the auto-refresh below
+ * reloaded and wiped their draft mid-planning. Track an explicit flag set by
+ * the edit handlers instead, so it cannot depend on who you are.
+ */
 function hasUnsavedDraft(){
-  if (!isRM()) return false;
-  if (currentData && currentData.plan && currentData.plan.locked) return false;
-  return Object.keys(draftGrid).some(s => Object.keys(draftGrid[s] || {}).length > 0);
+  return planDirty;
 }
+function markPlanDirty(){ planDirty = true; }
 
 /* ============ SETTINGS BAR (mode toggle only — Base Store now lives at bottom of Visit Plan) ============ */
 function renderBaseStoreBar(data){
@@ -1387,7 +1401,7 @@ function saveBaseStore(){
   google.script.run
     .withSuccessHandler(res => {
       btn.disabled = false; btn.textContent = 'Save';
-      if (res.success){ showToast(res.message, 'success'); loadDashboard(); }
+      if (res.success){ planDirty = false; showToast(res.message, 'success'); loadDashboard(); }
       else showToast(res.message, 'error');
     })
     .withFailureHandler(err => {
@@ -1454,13 +1468,17 @@ function loadDashboard(silent){
   google.script.run
     .withSuccessHandler(data => {
       if (data && data.error){ showToast(data.error, 'error'); return; }
+      const keepDraft = planDirty;      // a background refresh must never eat edits
       currentData = data;
-      draftGrid = {};
-      Object.keys(data.plan.grid || {}).forEach(s => {
-        draftGrid[s] = Object.assign({}, data.plan.grid[s]);
-      });
-      additionalStores = (data.plan.additional || []).slice();
-      while (additionalStores.length < data.additionalRowCount) additionalStores.push('');
+      if (!keepDraft){
+        draftGrid = {};
+        Object.keys(data.plan.grid || {}).forEach(s => {
+          draftGrid[s] = Object.assign({}, data.plan.grid[s]);
+        });
+        additionalStores = (data.plan.additional || []).slice();
+        while (additionalStores.length < data.additionalRowCount) additionalStores.push('');
+        planDirty = false;
+      }
 
       renderBaseStoreBar(data);
       renderVisitPlan(data);
@@ -1712,10 +1730,19 @@ function planDayEditorHtml(data){
     html += '<p class="pe-none">No stores added yet.</p>';
   }
 
+  html += '<div class="pe-offlabel">Or mark the whole day as</div>';
   html += '<div class="pe-offs">' + Object.keys(OFF_DAY_TYPES).map(code =>
     '<button type="button" class="pe-off' + (off === code ? ' on' : '') +
     '" onclick="setPlanOffDay(\'' + code + '\')">' + escapeHtml(OFF_DAY_TYPES[code]) +
     '</button>').join('') + '</div>';
+
+  // Leave usually runs several days together — tapping each date is tedious.
+  html += '<div class="pe-range">Same for the next ' +
+          '<select id="pe-span">' +
+          [2,3,4,5,6,7,10,14].map(n => '<option value="' + n + '">' + n + '</option>').join('') +
+          '</select> days ' +
+          '<button type="button" class="pe-off" onclick="applyOffRange()">Apply</button>' +
+          '</div>';
 
   // Where the counterpart is that day. Always shown when one exists — "nothing
   // planned" is as useful to know as a list of stores.
@@ -1817,6 +1844,7 @@ function selectPlanDay(day){
 }
 
 function addPlanVisit(){
+  markPlanDirty();
   const store = $('pe-store') ? $('pe-store').value : '';
   const type  = $('pe-type')  ? $('pe-type').value  : '';
   if (!store || !type) return;
@@ -1828,11 +1856,47 @@ function addPlanVisit(){
 }
 
 function removePlanVisit(store){
+  markPlanDirty();
   if (draftGrid[store]) delete draftGrid[store][selectedPlanDay];
   renderVisitPlan(currentData);
 }
 
+/**
+ * Repeat the selected day's off-day marker across the following days.
+ * Leave and holidays run in blocks, and tapping each date one at a time was
+ * the slow part. Only applies when the selected day already has a marker, so
+ * it can never blank out planned visits by accident.
+ */
+function applyOffRange(){
+  const code = planOffOn(selectedPlanDay);
+  if (!code){
+    showToast('First mark this day as Leave, Week off, Holiday or Office.', 'error');
+    return;
+  }
+  const span = Number(($('pe-span') || {}).value || 0);
+  if (!span) return;
+
+  const maxDay = (currentData.dayMeta || []).length;
+  const first = (currentData.stores || [])[0];
+  if (!first) return;
+
+  let applied = 0, hadVisits = 0;
+  for (let d = selectedPlanDay + 1; d <= Math.min(selectedPlanDay + span, maxDay); d++){
+    if (planVisitsOn(d).length) hadVisits++;
+    clearPlanDay(d);
+    if (!draftGrid[first.storeName]) draftGrid[first.storeName] = {};
+    draftGrid[first.storeName][d] = code;
+    applied++;
+  }
+  markPlanDirty();
+  renderVisitPlan(currentData);
+  showToast(OFF_DAY_TYPES[code] + ' applied to ' + applied + ' more day' +
+            (applied === 1 ? '' : 's') +
+            (hadVisits ? ' · ' + hadVisits + ' had visits, which were removed' : ''), 'success');
+}
+
 function setPlanOffDay(code){
+  markPlanDirty();
   const current = planOffOn(selectedPlanDay);
   clearPlanDay(selectedPlanDay);
   if (current !== code){
@@ -2101,6 +2165,7 @@ function findOffDayType(day){
 }
 
 function onCellChange(sel){
+  markPlanDirty();
   const td = sel.closest('td');
   const store = td.dataset.store;
   const day = Number(td.dataset.day);
@@ -2117,6 +2182,7 @@ function onCellChange(sel){
 }
 
 function onAdditionalStoreChange(idx, storeName){
+  markPlanDirty();
   const old = additionalStores[idx];
   if (old && draftGrid[old]){
     if (storeName) draftGrid[storeName] = draftGrid[old];
@@ -2168,7 +2234,7 @@ function editPlan(){
   if (!confirm('Unlock the current plan for editing?\nThis will delete the saved plan and let you submit a new one.')) return;
   google.script.run
     .withSuccessHandler(res => {
-      if (res.success){ showToast('Plan unlocked.', 'success'); loadDashboard(); }
+      if (res.success){ planDirty = false; showToast('Plan unlocked.', 'success'); loadDashboard(); }
       else showToast(res.message || 'Could not unlock plan.', 'error');
     })
     .withFailureHandler(err => showToast('Error: ' + err.message, 'error'))
