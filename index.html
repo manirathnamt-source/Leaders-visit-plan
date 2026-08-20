@@ -349,6 +349,9 @@
   .mchip.rm{background:#dbe6fb;color:var(--primary-dark)}
   .mchip.cm{background:#fbe8fb;color:#a21caf}
   .mc .more{font-size:9.5px;color:var(--muted)}
+  /* an untouched rest day: RM is off Sat+Sun, CM only Sun */
+  .mc.restday{background:#f4f6fa}
+  .mc .restnote{font-size:9px;color:var(--muted);font-style:italic}
 
   /* day popup */
   .lane h4{margin:0 0 7px;font-size:10.5px;font-weight:700;letter-spacing:.07em;
@@ -1875,7 +1878,7 @@ function planCalendarHtml(data, locked){
   // ---- month ----
   html += '<div class="pe-card"><h3>' + escapeHtml(monthLabel(data.month)) +
           '<span class="hint">' + (locked ? 'locked — click a date to view it'
-                                          : 'click a date to plan it') +
+                                          : restFillHint(data)) +
           '</span></h3><div class="pe-cal">';
   html += '<div class="pe-dow">' + order.map(d => '<span>' + d + '</span>').join('') + '</div>';
   html += '<div class="cellgrid">';
@@ -1889,6 +1892,60 @@ function planCalendarHtml(data, locked){
 
   html += '</div>';               // sc
   return html;
+}
+
+/**
+ * Rest days differ by role: an RM is off Saturday and Sunday, a CM only
+ * Sunday. dayMeta.weekend marks both for everyone, so decide here using the
+ * role of the person whose plan is on screen.
+ */
+function viewedRole(data){
+  if (data && data.itinerary && data.itinerary.role) return data.itinerary.role;
+  return (actor && actor.role) || 'RM';
+}
+
+function isRestDay(data, dm){
+  if (dm.weekday === 'Sun') return true;
+  if (dm.weekday === 'Sat') return viewedRole(data) === 'RM';
+  return false;
+}
+
+/** Rest days with nothing planned — the ones a "mark all" would fill. */
+function emptyRestDays(data){
+  return (data.dayMeta || []).filter(dm =>
+    isRestDay(data, dm) && !planVisitsOn(dm.day).length && !planOffOn(dm.day));
+}
+
+/** Header hint: offers to fill the untouched rest days in one go. */
+function restFillHint(data){
+  const empty = emptyRestDays(data);
+  if (!empty.length) return 'click a date to plan it';
+  const role = viewedRole(data);
+  const label = role === 'RM' ? 'Sat &amp; Sun' : 'Sun';
+  return '<button type="button" class="pe-off" onclick="markRestDaysOff(event)">' +
+         'Mark ' + empty.length + ' ' + label + ' as Week Off</button>';
+}
+
+/**
+ * Fill every untouched rest day with Week Off.
+ * Only days that are still empty are touched, so a Saturday someone genuinely
+ * plans to work — normal for a CM — is never overwritten.
+ */
+function markRestDaysOff(ev){
+  if (ev){ ev.stopPropagation(); ev.preventDefault(); }
+  const empty = emptyRestDays(currentData);
+  if (!empty.length) return;
+  const first = (currentData.stores || [])[0];
+  if (!first){ showToast('No stores mapped, so nothing to mark against.', 'error'); return; }
+
+  empty.forEach(dm => {
+    if (!draftGrid[first.storeName]) draftGrid[first.storeName] = {};
+    draftGrid[first.storeName][dm.day] = 'WO';
+  });
+  markPlanDirty();
+  renderVisitPlan(currentData);
+  showToast('Marked ' + empty.length + ' rest day' + (empty.length === 1 ? '' : 's') +
+            ' as Week Off', 'success');
 }
 
 /** Which day of this month is today, or 0 if we are looking at another month. */
@@ -1906,7 +1963,9 @@ function monthCellHtml(data, dm, todayD){
   let cmAll = [];
   cps.forEach(c => { c.stores.forEach(x => cmAll.push({ who: c.name, store: x.store, type: x.type })); });
 
-  const cls = 'mc' + (dm.weekend ? ' we' : '') + (dm.day === todayD ? ' today' : '');
+  const rest = isRestDay(data, dm);
+  const cls = 'mc' + (rest ? ' we' : '') + (dm.day === todayD ? ' today' : '') +
+              (rest && !off && !list.length && !cmAll.length ? ' restday' : '');
   const title = dm.day + ' ' + dm.weekday +
     (off ? ' — ' + OFF_DAY_TYPES[off]
          : (list.length ? ' — ' + list.length + ' yours' : '') +
@@ -1929,6 +1988,7 @@ function monthCellHtml(data, dm, todayD){
     });
     const extra = Math.max(0, list.length - 3) + Math.max(0, cmAll.length - 2);
     if (extra) inner += '<span class="more">+' + extra + ' more</span>';
+    if (rest && !list.length && !cmAll.length) inner += '<span class="restnote">rest day</span>';
   }
 
   return '<button type="button" class="' + cls + '" onclick="openPlanDay(' + dm.day + ')" ' +
@@ -2209,7 +2269,7 @@ function planMonthSummaryHtml(data){
   }).join('');
 
   rows.forEach(r => {
-    const weCls = r.dm.weekend ? ' style="color:var(--danger)"' : '';
+    const weCls = isRestDay(data, r.dm) ? ' style="color:var(--danger)"' : '';
     html += '<tr' + (r.shared.length ? ' class="shared"' : '') + '>';
     html += '<td' + weCls + '><b>' + r.dm.day + '</b> ' + escapeHtml(r.dm.weekday) +
             (r.shared.length ? ' <span class="joint" title="Both of you at the same store">together</span>' : '') +
