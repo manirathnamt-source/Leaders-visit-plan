@@ -532,6 +532,53 @@ function _assertCaller(caller) {
 }
 
 /**
+ * Diagnostic: run from the editor with a name to see exactly what the app
+ * resolves for that person — designation, stores, counterparts, plan.
+ * Answers "why is nothing loading for X" without guessing.
+ */
+function diagnoseUser(name) {
+  const out = [];
+  const raw = String(name || '').trim();
+  out.push('Asked for      : "' + raw + '"');
+
+  const canon = _canonicalPerson(raw);
+  out.push('Resolves to    : "' + canon + '"');
+
+  const u = _lookupUser(canon) || _lookupUser(raw);
+  if (!u) {
+    out.push('NOT in the Users sheet — they cannot sign in.');
+    Logger.log(out.join('\n'));
+    return out.join('\n');
+  }
+  out.push('Users row      : name="' + u.canonicalName + '" role=' + u.role +
+           ' cluster="' + u.cluster + '"');
+  out.push('Can plan       : ' + _canPlan(u.role) +
+           ' (store column ' + SM_ROLE_COL[u.role] + ')');
+
+  const stores = getStoresForRM(u.canonicalName);
+  out.push('Stores found   : ' + stores.length);
+  stores.slice(0, 5).forEach(function (s) { out.push('   - ' + s.storeName); });
+  if (stores.length > 5) out.push('   … +' + (stores.length - 5) + ' more');
+
+  const itin = getItineraryRows(u.canonicalName, _thisMonth());
+  out.push('Counterparts   : ' + (itin.rows.length - 1) + ' (' + itin.counterRole + ')');
+  itin.rows.filter(function (r) { return !r.self; }).forEach(function (r) {
+    out.push('   - ' + r.role + ' · ' + r.name + ' (' + Object.keys(r.days).length + ' planned days)');
+  });
+
+  const plan = getVisitPlan(u.canonicalName, _thisMonth());
+  out.push('Own plan       : ' + Object.keys(plan.grid).length + ' stores, locked=' + plan.locked);
+
+  Logger.log(out.join('\n'));
+  return out.join('\n');
+}
+
+function _thisMonth() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+/**
  * Diagnostic: given an RM name, returns what the system sees for their CMs.
  * Safe to call from the editor to debug why the CM dropdown is empty.
  */
