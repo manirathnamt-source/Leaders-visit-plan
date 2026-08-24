@@ -77,6 +77,7 @@
   .role-pill{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:.3px;color:#fff}
   .role-pill.RM{background:var(--primary)}
   .role-pill.CM{background:var(--cluster)}
+  .role-pill.RHR{background:#0369a1}
   .role-pill.Admin{background:var(--admin)}
   .refresh-indicator{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;padding-left:6px;border-left:1px solid var(--border)}
   .refresh-dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
@@ -605,6 +606,7 @@
   <select id="login-designation">
     <option value="RM">RM (Regional Manager)</option>
     <option value="CM">CM (Cluster Manager)</option>
+    <option value="RHR">RHR (Regional HR)</option>
     <option value="Admin">Admin</option>
   </select>
   <button class="btn-primary" id="login-btn" onclick="doLogin()">Sign In</button>
@@ -946,6 +948,8 @@ function downloadCSV(filename, rows){
 }
 function isRM(){ return actor && actor.role === 'RM'; }
 function isCM(){ return actor && actor.role === 'CM'; }
+/** Regional HR: sees the RMs and CMs on their stores, read-only. */
+function isRHR(){ return actor && actor.role === 'RHR'; }
 function isAdmin(){ return actor && actor.role === 'Admin'; }
 function caller(){ return { name: actor.name }; }
 
@@ -1034,6 +1038,11 @@ function doLogin(){
           // CM sees only their own data
           currentRM = actor.name;
           selectedCluster = actor.cluster || '';
+        } else if (isRHR()){
+          // RHR has no plan of their own — open on the first person they cover.
+          selectedCluster = '';
+          currentRM = (accessibleRMs[0] && accessibleRMs[0].name) ||
+                      (accessibleCMs[0] && accessibleCMs[0].name) || actor.name;
         } else {
           // Admin: start on the WHOLE region — no cluster filter, no user picked.
           // currentRM is only a fallback so the per-user tabs have something to
@@ -1152,16 +1161,27 @@ function bootstrapAfterLogin(){
  */
 function renderRMViewBar(){
   const bar = $('rm-view-bar');
-  if (!isRM() || !accessibleCMs.length){
+  // An RM drills into their CMs; an RHR into every RM and CM on their stores.
+  const showFor = (isRM() && accessibleCMs.length) ||
+                  (isRHR() && (accessibleRMs.length || accessibleCMs.length));
+  if (!showFor){
     bar.style.display = 'none';
     return;
   }
   const sel = $('rm-view-select');
-  sel.innerHTML = '<option value="__OWN__">OWN (my data)</option>' +
-    accessibleCMs.map(c => '<option value="' + escapeHtml(c.name) + '">CM · ' +
-      escapeHtml(c.name) + (c.cluster ? ' (' + escapeHtml(c.cluster) + ')' : '') +
-      '</option>').join('');
-  sel.value = (currentRM && currentRM !== actor.name) ? currentRM : '__OWN__';
+  const opt = (p, role) => '<option value="' + escapeHtml(p.name) + '">' + role + ' · ' +
+        escapeHtml(p.name) + (p.cluster ? ' (' + escapeHtml(p.cluster) + ')' : '') + '</option>';
+
+  if (isRHR()){
+    // No own plan to fall back to, so no OWN entry.
+    sel.innerHTML = accessibleRMs.map(r => opt(r, 'RM')).join('') +
+                    accessibleCMs.map(c => opt(c, 'CM')).join('');
+  } else {
+    sel.innerHTML = '<option value="__OWN__">OWN (my data)</option>' +
+                    accessibleCMs.map(c => opt(c, 'CM')).join('');
+  }
+  sel.value = (currentRM && currentRM !== actor.name) ? currentRM
+                                                     : (isRHR() ? sel.value : '__OWN__');
   $('rm-view-hint').textContent = currentRM === actor.name || !currentRM
     ? ''
     : '· Read-only view of ' + currentRM;
@@ -1174,9 +1194,9 @@ function renderRMViewBar(){
  */
 function onRMViewChange(){
   const val = $('rm-view-select').value;
-  if (val === '__OWN__'){
+  if (val === '__OWN__' && !isRHR()){
     currentRM = actor.name;
-  } else {
+  } else if (val){
     currentRM = val;
   }
   clearTabCaches();          // now looking at a different person's data

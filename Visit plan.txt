@@ -96,7 +96,20 @@ const LC = {
   TIME: 4, STORE_ALIAS: 5, STORE_NAME: 6, DESIGNATION: 7
 };
 
-const ROLES = { RM: 'RM', CM: 'CM', ADMIN: 'Admin' };
+const ROLES = { RM: 'RM', CM: 'CM', RHR: 'RHR', ADMIN: 'Admin' };
+
+/**
+ * Store Mapping columns. A Cluster column was assumed at index 3 but never
+ * existed; that slot now holds RHR, so reading it as a cluster would have
+ * turned a person's name into a cluster name across the app.
+ */
+const SM = { STORE: 0, RM: 1, CM: 2, RHR: 3 };
+
+/** Designations that own stores, in the column that names them. */
+const SM_ROLE_COL = {};
+SM_ROLE_COL[ROLES.RM]  = SM.RM;
+SM_ROLE_COL[ROLES.CM]  = SM.CM;
+SM_ROLE_COL[ROLES.RHR] = SM.RHR;
 
 /**
  * Backward-compat: old Users rows have Role='Cluster'. Treat as CM.
@@ -107,6 +120,7 @@ function _canonicalRole(rawRole) {
   const lc = r.toLowerCase();
   if (lc === 'rm') return ROLES.RM;
   if (lc === 'cm' || lc === 'cluster' || lc === 'cluster manager') return ROLES.CM;
+  if (lc === 'rhr' || lc === 'regional hr') return ROLES.RHR;
   if (lc === 'admin') return ROLES.ADMIN;
   return r; // unknown — leave as-is
 }
@@ -540,11 +554,43 @@ function diagnoseCMsForRM(rmName) {
  *   RM    → only themselves
  *   CM    → (empty) — CMs do not view RMs; hierarchy goes RM→CM, not CM→RM
  */
+/**
+ * The RMs and CMs named on the stores this person covers, found by whichever
+ * Store Mapping column carries their designation. This is what scopes an RHR
+ * to their own region rather than the whole company.
+ */
+function _peopleOnMyStores(user) {
+  const col = SM_ROLE_COL[user.role];
+  const out = { rms: [], cms: [] };
+  if (col === undefined) return out;
+
+  const sd = _values(SHEETS.STORE_MAPPING);
+  const rmSeen = {}, cmSeen = {};
+  for (let i = 1; i < sd.length; i++) {
+    if (!_samePerson(sd[i][col], user.canonicalName)) continue;
+    const rm = _canonicalPerson(sd[i][SM.RM]);
+    const cm = _canonicalPerson(sd[i][SM.CM]);
+    if (rm && !rmSeen[_norm(rm)]) { rmSeen[_norm(rm)] = 1; out.rms.push(rm); }
+    if (cm && !cmSeen[_norm(cm)]) { cmSeen[_norm(cm)] = 1; out.cms.push(cm); }
+  }
+  out.rms.sort(); out.cms.sort();
+  return out;
+}
+
 function _accessibleRMs(user) {
   const allRMs = _listAllRMs();
   if (user.role === ROLES.ADMIN) return allRMs;
   if (user.role === ROLES.RM) {
     return allRMs.filter(r => _norm(r.name) === _norm(user.canonicalName));
+  }
+  if (user.role === ROLES.RHR) {
+    // Only the RMs whose stores this RHR covers.
+    const mine = _peopleOnMyStores(user);
+    const byName = {};
+    allRMs.forEach(function (r) { byName[_norm(r.name)] = r; });
+    return mine.rms.map(function (n) {
+      return byName[_norm(n)] || { name: n, cluster: '' };
+    });
   }
   // CM: no RM visibility
   return [];
@@ -581,6 +627,12 @@ function _accessibleCMs(user) {
     const self = cmDirectory[_norm(user.canonicalName)];
     return self ? [self] : [];
   }
+  if (user.role === ROLES.RHR) {
+    // The CMs on this RHR's stores, whether or not they are in the Users sheet.
+    return _peopleOnMyStores(user).cms.map(function (n) {
+      return cmDirectory[_norm(n)] || { name: n, cluster: '' };
+    });
+  }
   if (user.role !== ROLES.RM) return [];
 
   // RM: scan Store Mapping for rows where RM Name = this user; collect distinct CM Names.
@@ -606,7 +658,7 @@ function _accessibleCMs(user) {
       // can at least see the pairing exists.
       for (let i = 1; i < sd.length; i++) {
         if (_norm(_canonicalPerson(sd[i][2])) === k) {
-          out.push({ name: _canonicalPerson(sd[i][2]), cluster: String(sd[i][3] || '').trim() });
+          out.push({ name: _canonicalPerson(sd[i][SM.CM]), cluster: '' });
           break;
         }
       }
@@ -624,8 +676,7 @@ function _accessibleClusters(user) {
     {
       const sd = _values(SHEETS.STORE_MAPPING);
       for (let i = 1; i < sd.length; i++) {
-        const cl = String(sd[i][3] || '').trim();    // col D = Cluster
-        if (cl) set.add(cl);
+        // Store Mapping has no cluster column — index 3 is RHR.
       }
     }
     return Array.from(set).sort();
@@ -663,16 +714,15 @@ function _listAllRMs() {
   return result;
 }
 
+/**
+ * Store Mapping has no cluster column — index 3 is RHR — so there is nothing
+ * to derive here. Kept as a no-op because _listAllRMs still calls it; clusters
+ * come from the Users sheet.
+ */
 function _buildRMClusterFromMapping() {
-  const map = {};
-  const data = _values(SHEETS.STORE_MAPPING);
-  for (let i = 1; i < data.length; i++) {
-    const rm = _norm(data[i][1]);
-    const cl = String(data[i][3] || '').trim();
-    if (rm && cl && !map[rm]) map[rm] = cl;
-  }
-  return map;
+  return {};
 }
+
 
 // ======= STORE MAPPING =======
 /**
@@ -695,21 +745,23 @@ function getStoresForRM(userName) {
   // Step 1 — formally mapped rows (as RM or CM)
   const rmList = [];
   const cmList = [];
+  const rhrList = [];
   const data = _values(SHEETS.STORE_MAPPING);
   for (let i = 1; i < data.length; i++) {
     const row = {
-      storeName: String(data[i][0]).trim(),
-      cmName   : String(data[i][2] || '').trim(),
-      cluster  : String(data[i][3] || '').trim(),
+      storeName: String(data[i][SM.STORE]).trim(),
+      cmName   : String(data[i][SM.CM] || '').trim(),
+      cluster  : '',                      // Store Mapping has no cluster column
       mapped   : true
     };
     if (!row.storeName) continue;
     // Short forms in Store Mapping must still match the signed-in name.
-    if (_samePerson(data[i][1], userName)) rmList.push(row);
-    if (_samePerson(data[i][2], userName)) cmList.push(row);
+    if (_samePerson(data[i][SM.RM],  userName)) rmList.push(row);
+    if (_samePerson(data[i][SM.CM],  userName)) cmList.push(row);
+    if (_samePerson(data[i][SM.RHR], userName)) rhrList.push(row);
   }
-  // Prefer RM match if it has any rows, else fall back to CM match.
-  const baseList = rmList.length ? rmList : cmList;
+  // Whichever column names this person: RM first, then CM, then RHR.
+  const baseList = rmList.length ? rmList : (cmList.length ? cmList : rhrList);
   const seenKeys = new Set(baseList.map(s => _storeKey(s.storeName)));
 
   // Step 2 — walk Login Logout for any store not already in the base list
