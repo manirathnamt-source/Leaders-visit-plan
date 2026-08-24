@@ -1205,7 +1205,7 @@ function onRMViewChange(){
  * "Own" means: the currently-viewed user (currentRM) is the logged-in user.
  */
 function applyViewingUI(){
-  const viewingSelf = (isRM() || isCM()) && currentRM &&
+  const viewingSelf = (isRM() || isCM() || isRHR()) && currentRM &&
                       String(currentRM).trim().toLowerCase() ===
                       String(actor.name).trim().toLowerCase();
 
@@ -1731,10 +1731,10 @@ function renderVisitPlan(data){
   // Non-RM actors never edit, so effectively locked
   // Editable only when: viewing self, plan not locked, and user is RM or CM.
   // Admin viewing is always read-only here (Admin uses the override tool in Phase 5).
-  const viewingSelf = (isRM() || isCM()) && currentRM &&
+  const viewingSelf = (isRM() || isCM() || isRHR()) && currentRM &&
                       String(currentRM).trim().toLowerCase() ===
                       String(actor.name).trim().toLowerCase();
-  const canEditPlan = (isRM() || isCM()) && viewingSelf;
+  const canEditPlan = (isRM() || isCM() || isRHR()) && viewingSelf;
   const effectivelyLocked = data.plan.locked || !canEditPlan;
   const cmsLabel = data.uniqueCMs.length ? data.uniqueCMs.join(', ') : '—';
 
@@ -2557,7 +2557,7 @@ function planSubmitBarHtml(data, canEditPlan, effectivelyLocked){
     }
     html += '<button class="btn-danger" id="admin-reset-btn" onclick="adminResetPlanUI()" ' +
             'title="Unlock this plan so the user can edit it again">🔓 Reset / Unlock Plan</button>';
-  } else if (!isRM() && !isCM()){
+  } else if (!isRM() && !isCM() && !isRHR()){
     html += '<span class="locked-indicator">👁️ View-only.</span>';
   } else if (!canEditPlan){
     // RM/CM viewing someone else

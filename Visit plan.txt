@@ -115,6 +115,15 @@ SM_ROLE_COL[ROLES.RM]  = SM.RM;
 SM_ROLE_COL[ROLES.CM]  = SM.CM;
 SM_ROLE_COL[ROLES.RHR] = SM.RHR;
 
+/**
+ * Designations that keep their own visit plan. Everyone named in a Store
+ * Mapping column plans their own visits — an RHR covers stores just as an RM
+ * or CM does.
+ */
+function _canPlan(role) {
+  return SM_ROLE_COL[role] !== undefined;
+}
+
 /** Display order wherever several designations are listed together. */
 const ROLE_ORDER = [ROLES.RM, ROLES.CM, ROLES.RHR];
 
@@ -1181,7 +1190,7 @@ function setBaseStore(caller, rmName, baseStore) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
   const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+  if (!isSelf || !_canPlan(u.role)) {
     return { success: false, message: 'Only the user can set their own base store.' };
   }
   if (!baseStore) return { success: false, message: 'Please select a base store.' };
@@ -1215,7 +1224,7 @@ function setTravelMode(caller, rmName, mode) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
   const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+  if (!isSelf || !_canPlan(u.role)) {
     return { success: false, message: 'Only the user can set their own travel mode.' };
   }
   // CMs are locked to Bike regardless of what they send
@@ -1273,7 +1282,7 @@ function setDailyMode(caller, rmName, dateKey, mode) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
   const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+  if (!isSelf || !_canPlan(u.role)) {
     return { success: false, message: 'Only the user can set their own travel mode.' };
   }
   if (u.role === ROLES.CM) mode = 'Bike';
@@ -1346,7 +1355,7 @@ function deleteVisitPlan(caller, rmName, month) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
   const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+  if (!isSelf || !_canPlan(u.role)) {
     return { success: false, message: 'Only the user can unlock their own plan.' };
   }
   if (!month) return { success: false, message: 'Missing month.' };
@@ -1424,7 +1433,7 @@ function submitVisitPlan(caller, rmName, month, cells) {
   const u = _assertCaller(caller);
   if (!u) return { success: false, message: 'Not authenticated.' };
   const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf || (u.role !== ROLES.RM && u.role !== ROLES.CM)) {
+  if (!isSelf || !_canPlan(u.role)) {
     return { success: false, message: 'Only the user can submit their own plan.' };
   }
   if (!/^\d{4}-\d{2}$/.test(month)) return { success: false, message: 'Invalid month.' };
@@ -1683,7 +1692,7 @@ function getPlanCompliance(caller, month) {
     const name = String(r[0] || '').trim();
     if (!name) return;
     const role = _canonicalRole(r[1] || '');
-    if (role !== ROLES.RM && role !== ROLES.CM) return;
+    if (!_canPlan(role)) return;        // Admin keeps no plan of their own
     const k = _norm(name);
     if (seen[k]) return;
     seen[k] = 1;
