@@ -1039,10 +1039,9 @@ function doLogin(){
           currentRM = actor.name;
           selectedCluster = actor.cluster || '';
         } else if (isRHR()){
-          // RHR has no plan of their own — open on the first person they cover.
+          // No drilling into one person: the calendar shows everyone they cover.
           selectedCluster = '';
-          currentRM = (accessibleRMs[0] && accessibleRMs[0].name) ||
-                      (accessibleCMs[0] && accessibleCMs[0].name) || actor.name;
+          currentRM = actor.name;
         } else {
           // Admin: start on the WHOLE region — no cluster filter, no user picked.
           // currentRM is only a fallback so the per-user tabs have something to
@@ -1162,8 +1161,7 @@ function bootstrapAfterLogin(){
 function renderRMViewBar(){
   const bar = $('rm-view-bar');
   // An RM drills into their CMs; an RHR into every RM and CM on their stores.
-  const showFor = (isRM() && accessibleCMs.length) ||
-                  (isRHR() && (accessibleRMs.length || accessibleCMs.length));
+  const showFor = (isRM() && accessibleCMs.length);
   if (!showFor){
     bar.style.display = 'none';
     return;
@@ -1172,16 +1170,9 @@ function renderRMViewBar(){
   const opt = (p, role) => '<option value="' + escapeHtml(p.name) + '">' + role + ' · ' +
         escapeHtml(p.name) + (p.cluster ? ' (' + escapeHtml(p.cluster) + ')' : '') + '</option>';
 
-  if (isRHR()){
-    // No own plan to fall back to, so no OWN entry.
-    sel.innerHTML = accessibleRMs.map(r => opt(r, 'RM')).join('') +
-                    accessibleCMs.map(c => opt(c, 'CM')).join('');
-  } else {
-    sel.innerHTML = '<option value="__OWN__">OWN (my data)</option>' +
-                    accessibleCMs.map(c => opt(c, 'CM')).join('');
-  }
-  sel.value = (currentRM && currentRM !== actor.name) ? currentRM
-                                                     : (isRHR() ? sel.value : '__OWN__');
+  sel.innerHTML = '<option value="__OWN__">OWN (my data)</option>' +
+                  accessibleCMs.map(c => opt(c, 'CM')).join('');
+  sel.value = (currentRM && currentRM !== actor.name) ? currentRM : '__OWN__';
   $('rm-view-hint').textContent = currentRM === actor.name || !currentRM
     ? ''
     : '· Read-only view of ' + currentRM;
@@ -1194,9 +1185,9 @@ function renderRMViewBar(){
  */
 function onRMViewChange(){
   const val = $('rm-view-select').value;
-  if (val === '__OWN__' && !isRHR()){
+  if (val === '__OWN__'){
     currentRM = actor.name;
-  } else if (val){
+  } else {
     currentRM = val;
   }
   clearTabCaches();          // now looking at a different person's data
@@ -2079,11 +2070,12 @@ function monthCellHtml(data, dm, todayD){
       inner += '<span class="mchip rm" title="' + escapeHtml(p.store + (t ? ' — ' + t.label : '')) +
                '">' + escapeHtml(storeCode(p.store)) + '</span>';
     });
-    cmAll.slice(0, 2).forEach(c => {
+    cmAll.slice(0, viewedRole(data) === 'RHR' ? 4 : 2).forEach(c => {
       inner += '<span class="mchip cm" title="' + escapeHtml(c.who + ': ' + c.store) + '">' +
                escapeHtml(storeCode(c.store)) + '</span>';
     });
-    const extra = Math.max(0, list.length - 3) + Math.max(0, cmAll.length - 2);
+    const extra = Math.max(0, list.length - 3) +
+                  Math.max(0, cmAll.length - (viewedRole(data) === 'RHR' ? 4 : 2));
     if (extra) inner += '<span class="more">+' + extra + ' more</span>';
     if (rest && !list.length && !cmAll.length) inner += '<span class="restnote">rest day</span>';
   }
@@ -2384,17 +2376,19 @@ function counterpartBlockHtml(data){
   if (others.length){
     html += '<div class="pe-counter"><b>Your ' +
             escapeHtml((itin && itin.counterRole) || 'CM') + ' on this day</b>';
-    html += others.map(c => {
+    // Sort so whoever is actually out that day is listed first.
+    const ordered = others.slice().sort((a, b) => b.stores.length - a.stores.length);
+    html += ordered.map(c => {
+      const who = '<b style="display:inline;text-transform:none;letter-spacing:0;font-size:11.5px">' +
+                  escapeHtml(c.role || '') + ' · ' + escapeHtml(c.name) + '</b>';
       if (!c.stores.length){
-        return '<span style="opacity:.7">' + escapeHtml(c.name) + ' — nothing planned</span>';
+        return '<span style="opacity:.55">' + who + ' — nothing planned</span>';
       }
-      return '<b style="display:inline;text-transform:none;letter-spacing:0;font-size:11.5px">' +
-             escapeHtml(c.name) + '</b> — ' +
-             c.stores.map(x => {
-               const t = data.visitTypes[x.type];
-               return escapeHtml(x.store) + (t ? ' <span style="opacity:.7">(' +
-                      escapeHtml(t.label) + ')</span>' : '');
-             }).join(', ');
+      return who + ' — ' + c.stores.map(x => {
+        const t = data.visitTypes[x.type];
+        return escapeHtml(x.store) + (t ? ' <span style="opacity:.7">(' +
+               escapeHtml(t.label) + ')</span>' : '');
+      }).join(', ');
     }).join('<br>');
     html += '</div>';
   }

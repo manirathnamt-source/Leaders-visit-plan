@@ -1555,23 +1555,35 @@ function getItineraryRows(viewedUser, month) {
   const role = u ? u.role : ROLES.RM;
   const displayName = u ? u.canonicalName : viewedUser;
 
-  let counterparts, counterRole;
+  // Each counterpart carries its own designation, so one list can mix roles.
+  let counterparts = [], counterRole;
+
   if (role === ROLES.CM) {
-    counterparts = _rmsForCM(viewedUser);
-    counterRole  = ROLES.RM;
+    counterRole = ROLES.RM;
+    counterparts = _rmsForCM(viewedUser).map(function (n) {
+      return { name: n, role: ROLES.RM };
+    });
+
+  } else if (role === ROLES.RHR) {
+    // An RHR has no plan of their own; they watch everyone on their stores.
+    counterRole = 'RM & CM';
+    const mine = _peopleOnMyStores({ role: ROLES.RHR, canonicalName: displayName });
+    counterparts = mine.rms.map(function (n) { return { name: n, role: ROLES.RM }; })
+             .concat(mine.cms.map(function (n) { return { name: n, role: ROLES.CM }; }));
+
   } else {
+    counterRole = ROLES.CM;
     counterparts = _accessibleCMs({
       role: ROLES.RM, canonicalName: displayName, cluster: (u ? u.cluster : '')
-    }).map(function (c) { return c.name; });
-    counterRole  = ROLES.CM;
+    }).map(function (c) { return { name: c.name, role: ROLES.CM }; });
   }
 
   const rows = [{
     name: displayName, role: role, self: true,
     days: _itineraryFor(viewedUser, month)
   }];
-  counterparts.forEach(function (n) {
-    rows.push({ name: n, role: counterRole, self: false, days: _itineraryFor(n, month) });
+  counterparts.forEach(function (p) {
+    rows.push({ name: p.name, role: p.role, self: false, days: _itineraryFor(p.name, month) });
   });
 
   return { rows: rows, role: role, counterRole: counterRole };
