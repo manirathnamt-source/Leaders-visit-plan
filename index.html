@@ -320,6 +320,16 @@
   /* the popup carries wide tables, so let it use the space */
   .modal-dialog{min-width:min(720px,92vw)}
 
+  /* date filter inside a detail popup */
+  .pop-range{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#f4f7fc;
+      border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:14px}
+  .pop-range label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+      color:var(--muted)}
+  .pop-range input[type="date"]{padding:5px 8px;border:1px solid var(--border);border-radius:6px;
+      font-size:12.5px;background:#fff;font-family:inherit}
+  .pop-range .sep{flex:1}
+  @media (max-width:560px){ .pop-range .sep{display:none} }
+
   /* stores needing a visit */
   .nv{max-height:322px;overflow-y:auto}
   .nv ul{margin:0;padding:0;list-style:none}
@@ -2070,6 +2080,78 @@ function ensureRailData(){
     .getDashboardData(caller(), currentRM, currentMonth, currentRange, parts);
 }
 
+/**
+ * Date controls inside the popup, so a claim period can be changed where the
+ * numbers are rather than by going back up to the range bar.
+ */
+function popupRangeBarHtml(kind){
+  const r = currentRange || fullMonthRange(currentMonth);
+  return '<div class="pop-range">' +
+    '<label>From</label><input type="date" id="pr-from" value="' + escapeHtml(r.from) + '">' +
+    '<label>To</label><input type="date" id="pr-to" value="' + escapeHtml(r.to) + '">' +
+    '<button class="btn-primary btn-sm" onclick="applyPopupRange(\'' + kind + '\')">Apply</button>' +
+    '<span class="sep"></span>' +
+    '<button class="btn-secondary btn-sm" onclick="popupPreset(\'' + kind + '\',\'conv\')" ' +
+    'title="21st of last month to the 20th of this one">21→20</button>' +
+    '<button class="btn-secondary btn-sm" onclick="popupPreset(\'' + kind + '\',\'month\')">Month</button>' +
+    '</div>';
+}
+
+function applyPopupRange(kind){
+  const from = ($('pr-from') || {}).value, to = ($('pr-to') || {}).value;
+  if (!from || !to){ showToast('Pick both dates.', 'error'); return; }
+  currentRange = (from <= to) ? { from: from, to: to } : { from: to, to: from };
+  reloadPopupRange(kind);
+}
+
+function popupPreset(kind, which){
+  if (!currentMonth) return;
+  currentRange = (which === 'conv') ? conveyancePeriodFor(currentMonth)
+                                    : fullMonthRange(currentMonth);
+  reloadPopupRange(kind);
+}
+
+/**
+ * Refetch just the part this popup shows for the new window.
+ * The plan itself is monthly, not range-based, so it is deliberately left
+ * alone — otherwise the calendar behind the popup would blank out.
+ */
+function reloadPopupRange(kind){
+  overviewCache = null; overviewKey = null;
+  summaryCache  = null; summaryKey  = null;
+  auditCountKey = null; complianceKey = null;
+  if (currentData){
+    delete currentData.comparison; delete currentData.travel;
+    delete currentData.audit;      delete currentData.topPerformer;
+  }
+  syncRangeInputs();
+  renderRangeStatus();
+
+  const body = $('modal-body');
+  if (body) body.innerHTML = '<div class="empty"><span class="spinner"></span> Loading…</div>';
+  const part = (kind === 'travel') ? 'travel' : 'actual';
+
+  google.script.run
+    .withSuccessHandler(data => {
+      if (!data || data.error){
+        if (body) body.innerHTML = '<div class="empty">Could not load that period.</div>';
+        return;
+      }
+      Object.keys(data).forEach(k => { if (data[k] === null) delete data[k]; });
+      currentData = Object.assign({}, currentData || {}, data);
+      if (kind === 'travel'){
+        showModal('Travel & conveyance · ' + periodLabel(), travelDetailHtml(currentData.travel));
+      } else {
+        showModal('Planned vs actual · ' + periodLabel(), actualDetailHtml(currentData));
+      }
+      if (activeTabName() === 'plan' && currentData.plan) renderVisitPlan(currentData);
+    })
+    .withFailureHandler(err => {
+      if (body) body.innerHTML = '<div class="empty">Error: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getDashboardData(caller(), currentRM, currentMonth, currentRange, [part]);
+}
+
 /** The window the figures cover — never leave a claim period ambiguous. */
 function periodLabel(){
   if (rangeIsConveyance()) return 'Conveyance cycle · ' +
@@ -2087,7 +2169,8 @@ function openTravelDetail(){
 }
 
 function travelDetailHtml(t){
-  let html = '<div class="travel-summary">';
+  let html = popupRangeBarHtml('travel');
+  html += '<div class="travel-summary">';
   html += travelCard('total', 'Total Distance', t.totalKM + ' KM',
             t.distanceSource === 'matrix' ? 'From Distance Calculator' : 'Straight-line estimate');
   html += travelCard('days',  'Days Travelled', t.daysTravelled, 'Days with swipes');
@@ -2125,7 +2208,7 @@ function openActualDetail(){
 
 function actualDetailHtml(data){
   const c = data.comparison, k = c.kpi || {};
-  let html = '';
+  let html = popupRangeBarHtml('actual');
   if (data.topPerformer){
     html += '<div class="top-perf-banner">🏆 <b>Top Performer:</b> ' +
             escapeHtml(data.topPerformer.rmName) + ' — ' + data.topPerformer.completion + '%</div>';
