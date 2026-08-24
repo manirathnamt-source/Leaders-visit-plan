@@ -2612,7 +2612,11 @@ function getDashboardData(caller, viewedRM, month, range, parts) {
   // That includes RMs they manage and CMs under them (for RMs).
   const accessibleRMs = _accessibleRMs(u);
   const accessibleCMs = _accessibleCMs(u);
+  // Your own data is always yours. The lists below hold the OTHER people you
+  // may look at, so a designation that appears in neither — an RHR is not an
+  // RM or a CM — was locked out of its own plan.
   const isAccessible =
+    _norm(u.canonicalName) === _norm(viewedRM) ||
     accessibleRMs.some(r => _norm(r.name) === _norm(viewedRM)) ||
     accessibleCMs.some(c => _norm(c.name) === _norm(viewedRM));
   if (!isAccessible) {
