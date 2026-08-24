@@ -770,6 +770,162 @@ function _getLastVisitDates(userName) {
   return out;
 }
 
+// ======= USER ADMINISTRATION =======
+/**
+ * Admin-only management of the Users sheet, so people can be added or removed
+ * without hand-editing the spreadsheet.
+ *
+ * Writes read the sheet directly rather than through _values, because they need
+ * true row positions after any earlier change in the same execution.
+ */
+function listUsers(caller) {
+  const u = _assertCaller(caller);
+  if (!u) return { error: 'Not authenticated.' };
+  if (u.role !== ROLES.ADMIN) return { error: 'Admin only.' };
+
+  const rows = [];
+  _values(SHEETS.USERS).slice(1).forEach(function (r, i) {
+    const name = String(r[0] || '').trim();
+    if (!name) return;
+    rows.push({
+      name   : name,
+      role   : _canonicalRole(r[1] || ''),
+      cluster: String(r[2] || '').trim(),
+      isSelf : _norm(name) === _norm(u.canonicalName),
+      row    : i + 2
+    });
+  });
+  rows.sort(function (a, b) {
+    if (a.role !== b.role) return a.role.localeCompare(b.role);
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    rows   : rows,
+    roles  : [ROLES.RM, ROLES.CM, ROLES.ADMIN],
+    admins : rows.filter(function (r) { return r.role === ROLES.ADMIN; }).length,
+    you    : u.canonicalName
+  };
+}
+
+function addUser(caller, payload) {
+  const u = _assertCaller(caller);
+  if (!u) return { success: false, message: 'Not authenticated.' };
+  if (u.role !== ROLES.ADMIN) return { success: false, message: 'Only Admin can add users.' };
+
+  const name    = String((payload && payload.name) || '').trim();
+  const role    = _canonicalRole((payload && payload.role) || '');
+  const cluster = String((payload && payload.cluster) || '').trim();
+
+  if (!name) return { success: false, message: 'Enter a name.' };
+  if ([ROLES.RM, ROLES.CM, ROLES.ADMIN].indexOf(role) < 0) {
+    return { success: false, message: 'Pick a designation.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = _sheet(SHEETS.USERS);
+    if (!sh) return { success: false, message: 'Users sheet missing.' };
+    const data = sh.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (_norm(data[i][0]) === _norm(name)) {
+        return { success: false, message: name + ' is already on the list as ' +
+                 _canonicalRole(data[i][1]) + '.' };
+      }
+    }
+    sh.appendRow([name, role, cluster]);
+    return { success: true, message: name + ' added as ' + role + '.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Remove a user. Their plans and swipe history are untouched — this only
+ * removes their ability to sign in.
+ */
+function removeUser(caller, name) {
+  const u = _assertCaller(caller);
+  if (!u) return { success: false, message: 'Not authenticated.' };
+  if (u.role !== ROLES.ADMIN) return { success: false, message: 'Only Admin can remove users.' };
+
+  const target = String(name || '').trim();
+  if (!target) return { success: false, message: 'No user given.' };
+  if (_norm(target) === _norm(u.canonicalName)) {
+    return { success: false, message: 'You cannot remove yourself.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = _sheet(SHEETS.USERS);
+    if (!sh) return { success: false, message: 'Users sheet missing.' };
+    const data = sh.getDataRange().getValues();
+
+    let found = -1, admins = 0;
+    for (let i = 1; i < data.length; i++) {
+      const nm = String(data[i][0] || '').trim();
+      if (!nm) continue;
+      if (_canonicalRole(data[i][1]) === ROLES.ADMIN) admins++;
+      if (_norm(nm) === _norm(target)) found = i + 1;
+    }
+    if (found < 0) return { success: false, message: target + ' is not on the list.' };
+
+    const isAdmin = _canonicalRole(data[found - 1][1]) === ROLES.ADMIN;
+    if (isAdmin && admins <= 1) {
+      return { success: false, message: 'That is the only Admin — promote someone else first.' };
+    }
+
+    sh.deleteRow(found);
+    return { success: true, message: target + ' removed. Their plans and history are unchanged.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Change someone's designation or cluster without removing and re-adding. */
+function updateUser(caller, name, role, cluster) {
+  const u = _assertCaller(caller);
+  if (!u) return { success: false, message: 'Not authenticated.' };
+  if (u.role !== ROLES.ADMIN) return { success: false, message: 'Only Admin can change users.' };
+
+  const target  = String(name || '').trim();
+  const newRole = _canonicalRole(role || '');
+  if (!target) return { success: false, message: 'No user given.' };
+  if ([ROLES.RM, ROLES.CM, ROLES.ADMIN].indexOf(newRole) < 0) {
+    return { success: false, message: 'Pick a designation.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = _sheet(SHEETS.USERS);
+    if (!sh) return { success: false, message: 'Users sheet missing.' };
+    const data = sh.getDataRange().getValues();
+
+    let found = -1, admins = 0;
+    for (let i = 1; i < data.length; i++) {
+      const nm = String(data[i][0] || '').trim();
+      if (!nm) continue;
+      if (_canonicalRole(data[i][1]) === ROLES.ADMIN) admins++;
+      if (_norm(nm) === _norm(target)) found = i + 1;
+    }
+    if (found < 0) return { success: false, message: target + ' is not on the list.' };
+
+    const wasAdmin = _canonicalRole(data[found - 1][1]) === ROLES.ADMIN;
+    if (wasAdmin && newRole !== ROLES.ADMIN && admins <= 1) {
+      return { success: false, message: 'That is the only Admin — promote someone else first.' };
+    }
+
+    sh.getRange(found, 2).setValue(newRole);
+    sh.getRange(found, 3).setValue(String(cluster || '').trim());
+    return { success: true, message: target + ' is now ' + newRole + '.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ======= NAME RESOLUTION =======
 /**
  * Store Mapping writes people's names in short form — "Kanagarathinam",
