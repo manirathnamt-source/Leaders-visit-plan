@@ -105,11 +105,18 @@ const ROLES = { RM: 'RM', CM: 'CM', RHR: 'RHR', ADMIN: 'Admin' };
  */
 const SM = { STORE: 0, RM: 1, CM: 2, RHR: 3 };
 
-/** Designations that own stores, in the column that names them. */
+/**
+ * Designations that own stores, in the column that names them. Adding RMM or
+ * VM later is a column in the sheet plus a line here — everything that walks
+ * these roles reads from this map.
+ */
 const SM_ROLE_COL = {};
 SM_ROLE_COL[ROLES.RM]  = SM.RM;
 SM_ROLE_COL[ROLES.CM]  = SM.CM;
 SM_ROLE_COL[ROLES.RHR] = SM.RHR;
+
+/** Display order wherever several designations are listed together. */
+const ROLE_ORDER = [ROLES.RM, ROLES.CM, ROLES.RHR];
 
 /**
  * Backward-compat: old Users rows have Role='Cluster'. Treat as CM.
@@ -1017,13 +1024,23 @@ function _canonicalPerson(name) {
   const toks = k.split(/\s+/).filter(function (t) { return t.length >= 4; });
   if (!toks.length) return raw;
 
-  let cands = null;
+  // Score candidates by how many name parts match, rather than demanding all
+  // of them. The sheets disagree on spellings — "Mudassir Quardi" against
+  // "Mudassir Quadri" — and requiring every part meant one typo killed the
+  // match entirely. Only a single best candidate wins; a tie is left alone.
+  const score = {};
   toks.forEach(function (t) {
-    const list = idx.byToken[t] || [];
-    cands = (cands === null) ? list.slice()
-                             : cands.filter(function (x) { return list.indexOf(x) >= 0; });
+    (idx.byToken[t] || []).forEach(function (name) {
+      score[name] = (score[name] || 0) + 1;
+    });
   });
-  return (cands && cands.length === 1) ? cands[0] : raw;
+
+  let best = null, bestN = 0, tied = false;
+  Object.keys(score).forEach(function (name) {
+    if (score[name] > bestN) { best = name; bestN = score[name]; tied = false; }
+    else if (score[name] === bestN) { tied = true; }
+  });
+  return (best && !tied) ? best : raw;
 }
 
 /** Do two spellings refer to the same person? */
@@ -1555,28 +1572,39 @@ function getItineraryRows(viewedUser, month) {
   const role = u ? u.role : ROLES.RM;
   const displayName = u ? u.canonicalName : viewedUser;
 
-  // Each counterpart carries its own designation, so one list can mix roles.
-  let counterparts = [], counterRole;
+  // Everyone else named on this person's stores, in every designation column
+  // but their own. That gives RM -> CM & RHR, CM -> RM & RHR, RHR -> RM & CM
+  // from one rule, and picks up RMM or VM automatically once those columns
+  // are added to SM_ROLE_COL.
+  const counterparts = [];
+  const myCol = SM_ROLE_COL[role];
+  const otherRoles = ROLE_ORDER.filter(function (r) { return r !== role; });
 
-  if (role === ROLES.CM) {
-    counterRole = ROLES.RM;
-    counterparts = _rmsForCM(viewedUser).map(function (n) {
-      return { name: n, role: ROLES.RM };
+  if (myCol !== undefined) {
+    const sd = _values(SHEETS.STORE_MAPPING);
+    const seen = {};
+    for (let i = 1; i < sd.length; i++) {
+      if (!_samePerson(sd[i][myCol], displayName)) continue;
+      otherRoles.forEach(function (r) {
+        const n = _canonicalPerson(sd[i][SM_ROLE_COL[r]]);
+        if (!n) return;
+        const key = r + '|' + _norm(n);
+        if (seen[key]) return;
+        seen[key] = 1;
+        counterparts.push({ name: n, role: r });
+      });
+    }
+    counterparts.sort(function (a, b) {
+      const ra = ROLE_ORDER.indexOf(a.role), rb = ROLE_ORDER.indexOf(b.role);
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name);
     });
-
-  } else if (role === ROLES.RHR) {
-    // An RHR has no plan of their own; they watch everyone on their stores.
-    counterRole = 'RM & CM';
-    const mine = _peopleOnMyStores({ role: ROLES.RHR, canonicalName: displayName });
-    counterparts = mine.rms.map(function (n) { return { name: n, role: ROLES.RM }; })
-             .concat(mine.cms.map(function (n) { return { name: n, role: ROLES.CM }; }));
-
-  } else {
-    counterRole = ROLES.CM;
-    counterparts = _accessibleCMs({
-      role: ROLES.RM, canonicalName: displayName, cluster: (u ? u.cluster : '')
-    }).map(function (c) { return { name: c.name, role: ROLES.CM }; });
   }
+
+  const present = {};
+  counterparts.forEach(function (p) { present[p.role] = 1; });
+  const counterRole = otherRoles.filter(function (r) { return present[r]; }).join(' & ') ||
+                      otherRoles.join(' & ');
 
   const rows = [{
     name: displayName, role: role, self: true,
