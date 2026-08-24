@@ -628,12 +628,23 @@ function _peopleOnMyStores(user) {
   if (col === undefined) return out;
 
   const sd = _values(SHEETS.STORE_MAPPING);
-  const rmSeen = {}, cmSeen = {};
+
+  // The RMs this person works under. An RM works under themselves.
+  const myRMs = {};
   for (let i = 1; i < sd.length; i++) {
     if (!_samePerson(sd[i][col], user.canonicalName)) continue;
     const rm = _canonicalPerson(sd[i][SM.RM]);
+    if (rm) myRMs[_norm(rm)] = 1;
+  }
+
+  // Everyone on those RMs' stores — the whole regional team, rather than only
+  // the people who happen to share a store with them.
+  const rmSeen = {}, cmSeen = {};
+  for (let i = 1; i < sd.length; i++) {
+    const rm = _canonicalPerson(sd[i][SM.RM]);
+    if (!rm || !myRMs[_norm(rm)]) continue;
     const cm = _canonicalPerson(sd[i][SM.CM]);
-    if (rm && !rmSeen[_norm(rm)]) { rmSeen[_norm(rm)] = 1; out.rms.push(rm); }
+    if (!rmSeen[_norm(rm)]) { rmSeen[_norm(rm)] = 1; out.rms.push(rm); }
     if (cm && !cmSeen[_norm(cm)]) { cmSeen[_norm(cm)] = 1; out.cms.push(cm); }
   }
   out.rms.sort(); out.cms.sort();
@@ -1632,24 +1643,38 @@ function getItineraryRows(viewedUser, month) {
   // but their own. That gives RM -> CM & RHR, CM -> RM & RHR, RHR -> RM & CM
   // from one rule, and picks up RMM or VM automatically once those columns
   // are added to SM_ROLE_COL.
+  // The RM heads the region and the CM and RHR report to them, so a person's
+  // team is everyone working under the same RM — not merely those who happen
+  // to share a store. That is what lets two CMs under one RM see each other.
   const counterparts = [];
   const myCol = SM_ROLE_COL[role];
-  const otherRoles = ROLE_ORDER.filter(function (r) { return r !== role; });
 
   if (myCol !== undefined) {
     const sd = _values(SHEETS.STORE_MAPPING);
-    const seen = {};
+
+    // Which RMs do I work under? An RM works under themselves.
+    const myRMs = {};
     for (let i = 1; i < sd.length; i++) {
       if (!_samePerson(sd[i][myCol], displayName)) continue;
-      otherRoles.forEach(function (r) {
+      const rm = _canonicalPerson(sd[i][SM.RM]);
+      if (rm) myRMs[_norm(rm)] = 1;
+    }
+
+    // Everyone named on any store belonging to those RMs.
+    const seen = {};
+    for (let i = 1; i < sd.length; i++) {
+      const rm = _canonicalPerson(sd[i][SM.RM]);
+      if (!rm || !myRMs[_norm(rm)]) continue;
+      ROLE_ORDER.forEach(function (r) {
         const n = _canonicalPerson(sd[i][SM_ROLE_COL[r]]);
-        if (!n) return;
+        if (!n || _norm(n) === _norm(displayName)) return;   // not myself
         const key = r + '|' + _norm(n);
         if (seen[key]) return;
         seen[key] = 1;
         counterparts.push({ name: n, role: r });
       });
     }
+
     counterparts.sort(function (a, b) {
       const ra = ROLE_ORDER.indexOf(a.role), rb = ROLE_ORDER.indexOf(b.role);
       if (ra !== rb) return ra - rb;
@@ -1659,8 +1684,8 @@ function getItineraryRows(viewedUser, month) {
 
   const present = {};
   counterparts.forEach(function (p) { present[p.role] = 1; });
-  const counterRole = otherRoles.filter(function (r) { return present[r]; }).join(' & ') ||
-                      otherRoles.join(' & ');
+  const counterRole = ROLE_ORDER.filter(function (r) { return present[r]; }).join(' & ') ||
+                      'team';
 
   const rows = [{
     name: displayName, role: role, self: true,
