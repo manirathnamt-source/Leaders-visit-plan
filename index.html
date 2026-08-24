@@ -640,6 +640,9 @@
     <input type="date" id="range-from" onchange="onRangeChange()">
     <span style="color:var(--muted)">to</span>
     <input type="date" id="range-to" onchange="onRangeChange()">
+    <button type="button" class="btn-secondary btn-sm" onclick="useConveyancePeriod()"
+            title="21st of last month to the 20th of this one — the local conveyance cycle">
+      Conveyance 21→20</button>
     <button type="button" class="btn-secondary btn-sm" onclick="resetRangeToMonth()">Match month</button>
     <span id="range-status" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
   </div>
@@ -1328,6 +1331,45 @@ function onRangeChange(){
 /**
  * Reset the Report Range back to the full currently-selected Plan Month.
  */
+/**
+ * The local conveyance cycle runs 21st to 20th, so September's claim covers
+ * 21 Aug – 20 Sep. Sets the report range to that window for the selected month.
+ */
+function conveyancePeriodFor(ym){
+  const [y, m] = ym.split('-').map(Number);
+  const start = new Date(y, m - 2, 21);      // 21st of the previous month
+  const end   = new Date(y, m - 1, 20);      // 20th of this one
+  const f = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                 '-' + String(d.getDate()).padStart(2, '0');
+  return { from: f(start), to: f(end) };
+}
+
+function useConveyancePeriod(){
+  if (!currentMonth) return;
+  currentRange = conveyancePeriodFor(currentMonth);
+  clearTabCaches();
+  syncRangeInputs();
+  renderRangeStatus();
+  loadDashboard();
+  if ($('panel-summary').classList.contains('active')) loadSummary();
+  showToast('Showing 21 ' + monthLabel(_prevMonthLabel(currentMonth)) + ' – 20 ' +
+            monthLabel(currentMonth), 'success');
+}
+
+/** 'YYYY-MM' of the month before — for labelling the conveyance window. */
+function _prevMonthLabel(ym){
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+/** Is the current range exactly the 21→20 conveyance window? */
+function rangeIsConveyance(){
+  if (!currentRange || !currentMonth) return false;
+  const c = conveyancePeriodFor(currentMonth);
+  return currentRange.from === c.from && currentRange.to === c.to;
+}
+
 function resetRangeToMonth(){
   if (!currentMonth) return;
   clearTabCaches();
@@ -1361,7 +1403,9 @@ function renderRangeStatus(){
 
   // Summary button label (compact)
   let compactMsg;
-  if (isFullMonth){
+  if (rangeIsConveyance()){
+    compactMsg = 'Conveyance 21→20 · ' + days + 'd';
+  } else if (isFullMonth){
     compactMsg = 'Full month · ' + days + 'd';
   } else if (spans){
     compactMsg = '⚠ ' + countMonthsInRange(currentRange) + ' months · ' + days + 'd';
@@ -1374,7 +1418,10 @@ function renderRangeStatus(){
 
   // Expanded editor status line (full text)
   let fullMsg;
-  if (isFullMonth){
+  if (rangeIsConveyance()){
+    fullMsg = 'Conveyance cycle · ' + formatDatePretty(currentRange.from) + ' – ' +
+              formatDatePretty(currentRange.to) + ' · ' + days + ' days';
+  } else if (isFullMonth){
     fullMsg = 'Full month · ' + days + ' days';
   } else if (spans){
     fullMsg = '⚠ Spans ' + countMonthsInRange(currentRange) + ' months · ' + days + ' days';
@@ -1786,7 +1833,8 @@ function travelRailHtml(data){
   html += '<div class="m"><span class="l">' + (t ? 'Claimable' : 'Est. claim') +
           '</span><span class="v money">' +
           formatINR(t ? (t.costEstimate || 0) : (k.travelReimb || 0)) + '</span><span class="s">' +
-          escapeHtml((t && t.defaultMode) || data.travelMode || 'Car') + '</span></div>';
+          escapeHtml(((t && t.defaultMode) || data.travelMode || 'Car') +
+          (rangeIsConveyance() ? ' · 21→20' : '')) + '</span></div>';
 
   if (actualKM != null){
     html += '<div class="split">';
@@ -2022,10 +2070,20 @@ function ensureRailData(){
     .getDashboardData(caller(), currentRM, currentMonth, currentRange, parts);
 }
 
+/** The window the figures cover — never leave a claim period ambiguous. */
+function periodLabel(){
+  if (rangeIsConveyance()) return 'Conveyance cycle · ' +
+    formatDatePretty(currentRange.from) + ' – ' + formatDatePretty(currentRange.to);
+  if (currentRange && currentMonth && !rangeMatchesMonth(currentRange, currentMonth)){
+    return formatDatePretty(currentRange.from) + ' – ' + formatDatePretty(currentRange.to);
+  }
+  return monthLabel(currentMonth);
+}
+
 function openTravelDetail(){
   const t = currentData && currentData.travel;
   if (!t){ showModal('Travel & conveyance', '<div class="empty">Loading…</div>'); ensureRailData(); return; }
-  showModal('Travel & conveyance · ' + monthLabel(currentData.month), travelDetailHtml(t));
+  showModal('Travel & conveyance · ' + periodLabel(), travelDetailHtml(t));
 }
 
 function travelDetailHtml(t){
@@ -2062,7 +2120,7 @@ function travelDetailHtml(t){
 function openActualDetail(){
   const c = currentData && currentData.comparison;
   if (!c){ showModal('Planned vs actual', '<div class="empty">Loading…</div>'); ensureRailData(); return; }
-  showModal('Planned vs actual · ' + monthLabel(currentData.month), actualDetailHtml(currentData));
+  showModal('Planned vs actual · ' + periodLabel(), actualDetailHtml(currentData));
 }
 
 function actualDetailHtml(data){
