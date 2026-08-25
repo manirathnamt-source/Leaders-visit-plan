@@ -457,29 +457,36 @@
       color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--border);
       display:flex;justify-content:space-between;align-items:center;gap:10px}
   .pm > h3 .hint{font-weight:500;letter-spacing:0;text-transform:none;font-size:11.5px}
-  .pm-wrap{max-height:340px;overflow-y:auto}
-  .pm table{width:100%;border-collapse:collapse;font-size:12.5px}
-  .pm th{position:sticky;top:0;background:#f1f5fb;text-align:left;padding:8px 12px;
-      font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-      color:var(--muted);border-bottom:1px solid var(--border);z-index:1}
-  .pm th.r,.pm td.r{text-align:right}
-  .pm td{padding:8px 12px;border-bottom:1px solid #eef1f6;vertical-align:top}
-  .pm tr:last-child td{border-bottom:none}
-  .pm tr.gap td{background:#fff5f5}
-  .pm .sname{font-weight:600}
-  .pm .cnt{font-weight:700;font-variant-numeric:tabular-nums}
-  .pm .dates{color:var(--muted);font-size:11.5px;line-height:1.6}
-  .pm .dchip{display:inline-block;border-radius:5px;padding:1px 6px;margin:0 3px 3px 0;
-      font-weight:600;font-size:11px;letter-spacing:.02em}
-  .pm .dchip.me{background:#dbe6fb;color:var(--primary-dark)}
-  .pm .dchip.cp{background:#fbe8fb;color:#a21caf}
+  /* header labels keep the small-caps treatment; the table itself is .pmt */
+  .pm th{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+      color:var(--muted)}
+  /* One colour per team member, held across the header and their column. */
+  .pm .dchip{display:inline-block;border-radius:5px;padding:2px 6px;margin:0 3px 3px 0;
+      font-weight:700;font-size:11px;letter-spacing:.02em;white-space:nowrap}
+  .pm .who{display:inline-block;border-radius:5px;padding:2px 8px;font-weight:700;
+      font-size:10.5px;letter-spacing:.03em;white-space:nowrap}
+  .pm .p0{background:#dbe6fb;color:#1d4ed8}
+  .pm .p1{background:#fbe1f4;color:#a21caf}
+  .pm .p2{background:#d5f0ea;color:#0f766e}
+  .pm .p3{background:#fdead0;color:#b45309}
+  .pm .p4{background:#e4defb;color:#6d28d9}
+  .pm .p5{background:#fcdde3;color:#be123c}
   .pm .dchip.off{background:#eceff4;color:var(--muted)}
-  .pm .dash{color:var(--border)}
-  .pm .offcell{color:var(--muted);font-style:italic}
-  .pm tr.shared td{background:#f0fbf8}
-  .pm .joint{display:inline-block;background:#dcf2ef;color:#0f766e;border-radius:5px;
-      padding:0 5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
-  .pm-wrap{max-height:none}
+  .pm .dash{color:#cbd5e3}
+  .pm .offcell{color:var(--muted);font-style:italic;font-size:11.5px}
+  .pm tr.shared td{background:#f2fbf8}
+  .pm .joint{display:inline-block;background:#d5f0ea;color:#0f766e;border-radius:5px;
+      margin-left:6px;padding:0 5px;font-size:9px;font-weight:700;letter-spacing:.04em;
+      text-transform:uppercase;vertical-align:middle}
+  .pm-wrap{max-height:none;overflow-x:auto}
+  .pmt{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px}
+  .pmt th{position:sticky;top:0;background:#f1f5fb;text-align:left;padding:9px 12px;
+      border-bottom:1px solid var(--border);z-index:1;white-space:nowrap}
+  .pmt td{padding:7px 12px;border-bottom:1px solid #eef1f6;vertical-align:top}
+  .pmt tr:last-child td{border-bottom:none}
+  .pmt .dcol{white-space:nowrap;width:1%;color:var(--text)}
+  .pmt tbody tr:hover td{background:#f8fafc}
+  .pmt tbody tr.shared:hover td{background:#eaf7f3}
   .pm .warnrow{color:var(--danger);font-weight:600;font-size:11.5px}
   .pm-foot{padding:9px 14px;border-top:1px solid var(--border);background:#f8fafc;
       font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
@@ -2405,59 +2412,73 @@ function planMonthSummaryHtml(data){
   const days = data.dayMeta || [];
   const stores = (data.stores || []).filter(s => s.storeName);
   if (!days.length) return '';
-  const counterRole = (data.itinerary && data.itinerary.counterRole) || 'CM';
 
-  // Day by day, both sides, so the month can be read without opening anything.
+  // One column per person beats lumping the team into a single cell: with a
+  // shared column you cannot tell which CM is covering which store.
+  const itin = (data.itinerary && data.itinerary.rows) || [];
+  const self = itin.filter(r => r.self)[0];
+  const others = itin.filter(r => !r.self);
+  const people = [{ name: (self && self.name) || data.rmName, role: (self && self.role) || '',
+                    self: true }]
+                 .concat(others.map(r => ({ name: r.name, role: r.role, self: false, days: r.days })));
+
+  const dayFor = (person, day) => {
+    if (person.self){
+      return { visits: planVisitsOn(day), off: planOffOn(day) };
+    }
+    return { visits: ((person.days && person.days[day]) || []), off: '' };
+  };
+
   const rows = [];
-  let myVisits = 0, cpVisits = 0, sharedDays = 0;
+  let myVisits = 0, sharedDays = 0;
   days.forEach(dm => {
-    const mine = planVisitsOn(dm.day);
-    const off  = planOffOn(dm.day);
-    let theirs = [];
-    counterpartsOn(data, dm.day).forEach(c => {
-      c.stores.forEach(x => theirs.push({ who: c.name, store: x.store, type: x.type }));
-    });
-    if (!mine.length && !theirs.length && !off) return;   // nothing happened that day
-    myVisits += mine.length;
-    cpVisits += theirs.length;
-    const shared = mine.filter(m => theirs.some(t => storeKeyOf(t.store) === storeKeyOf(m.store)));
-    if (shared.length) sharedDays++;
-    rows.push({ dm, mine, theirs, off, shared });
+    const cells = people.map(p => dayFor(p, dm.day));
+    const any = cells.some(c => c.visits.length || c.off);
+    if (!any) return;
+    myVisits += cells[0].visits.length;
+    const mine = cells[0].visits.map(v => storeKeyOf(v.store));
+    const shared = cells.slice(1).some(c =>
+      c.visits.some(v => mine.indexOf(storeKeyOf(v.store)) >= 0));
+    if (shared) sharedDays++;
+    rows.push({ dm, cells, shared });
   });
 
-  let html = '<div class="pm"><h3>Day by day' +
-             '<span class="hint">you and your ' + escapeHtml(counterRole) +
-             ', no clicking needed</span></h3><div class="pm-wrap"><table><thead><tr>' +
-             '<th style="width:74px">Date</th><th>You</th><th>Your ' +
-             escapeHtml(counterRole) + '</th></tr></thead><tbody>';
-
-  if (!rows.length){
-    html += '<tr><td colspan="3" style="color:var(--muted)">Nothing planned yet this month.</td></tr>';
-  }
-
-  const cell = (list, cls) => list.map(x => {
+  const chip = (list, idx) => list.map(x => {
     const t = data.visitTypes[x.type];
-    return '<span class="dchip ' + cls + '" title="' +
+    return '<span class="dchip p' + (idx % 6) + '" title="' +
            escapeHtml(x.store + (t ? ' — ' + t.label : '')) + '">' +
            escapeHtml(storeCode(x.store)) + '</span>';
   }).join('');
 
+  let html = '<div class="pm"><h3>Day by day' +
+             '<span class="hint">a column each — hover a code for the store</span></h3>' +
+             '<div class="pm-wrap"><table class="pmt"><thead><tr><th class="dcol">Date</th>';
+  people.forEach((p, i) => {
+    html += '<th><span class="who p' + (i % 6) + '">' +
+            (p.role ? escapeHtml(p.role) + ' · ' : '') +
+            escapeHtml(p.self ? 'You' : p.name) + '</span></th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  if (!rows.length){
+    html += '<tr><td colspan="' + (people.length + 1) +
+            '" style="color:var(--muted)">Nothing planned yet this month.</td></tr>';
+  }
+
   rows.forEach(r => {
-    const weCls = isRestDay(data, r.dm) ? ' style="color:var(--danger)"' : '';
-    html += '<tr' + (r.shared.length ? ' class="shared"' : '') + '>';
-    html += '<td' + weCls + '><b>' + r.dm.day + '</b> ' + escapeHtml(r.dm.weekday) +
-            (r.shared.length ? ' <span class="joint" title="Both of you at the same store">together</span>' : '') +
+    html += '<tr' + (r.shared ? ' class="shared"' : '') + '>';
+    html += '<td class="dcol"' + (isRestDay(data, r.dm) ? ' style="color:var(--danger)"' : '') +
+            '><b>' + r.dm.day + '</b> ' + escapeHtml(r.dm.weekday) +
+            (r.shared ? '<span class="joint" title="Same store as a team member">together</span>' : '') +
             '</td>';
-    if (r.off){
-      html += '<td colspan="2" class="offcell">' + escapeHtml(OFF_DAY_TYPES[r.off]) + '</td>';
-    } else {
-      html += '<td>' + (r.mine.length ? cell(r.mine, 'me') : '<span class="dash">—</span>') + '</td>';
-      html += '<td>' + (r.theirs.length ? cell(r.theirs, 'cp') : '<span class="dash">—</span>') + '</td>';
-    }
+    r.cells.forEach((c, i) => {
+      if (c.off) html += '<td class="offcell">' + escapeHtml(OFF_DAY_TYPES[c.off]) + '</td>';
+      else if (!c.visits.length) html += '<td><span class="dash">—</span></td>';
+      else html += '<td>' + chip(c.visits, i) + '</td>';
+    });
     html += '</tr>';
   });
 
-  // the gap check that used to live in the store-wise review
   const covered = {};
   Object.keys(draftGrid).forEach(s => {
     Object.keys(draftGrid[s]).forEach(d => { if (!OFF_DAY_TYPES[draftGrid[s][d]]) covered[s] = 1; });
@@ -2465,12 +2486,11 @@ function planMonthSummaryHtml(data){
   const gaps = stores.filter(s => !covered[s.storeName]);
 
   html += '</tbody></table></div><div class="pm-foot">' +
-          '<span><b>' + myVisits + '</b> yours</span>' +
-          '<span><b>' + cpVisits + '</b> ' + escapeHtml(counterRole) + '</span>' +
+          '<span><b>' + myVisits + '</b> visits planned by you</span>' +
           '<span><b>' + sharedDays + '</b> day' + (sharedDays === 1 ? '' : 's') + ' together</span>' +
           (gaps.length
             ? '<span style="color:var(--danger)"><b>' + gaps.length + '</b> store' +
-              (gaps.length === 1 ? '' : 's') + ' with nothing planned: ' +
+              (gaps.length === 1 ? '' : 's') + ' unplanned: ' +
               escapeHtml(gaps.slice(0, 4).map(s => storeCode(s.storeName)).join(', ')) +
               (gaps.length > 4 ? ' +' + (gaps.length - 4) : '') + '</span>'
             : '<span style="color:var(--success)">every store covered</span>') +
