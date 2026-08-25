@@ -187,7 +187,7 @@ function _sheet(name) {
  * sheet is missing so callers can drop their own existence guards.
  *
  * Read paths only. Functions that WRITE (setBaseStore, setDailyMode,
- * adminResetPlan, deleteVisitPlan …) deliberately keep their own
+ * adminResetPlan …) deliberately keep their own
  * getDataRange() call, so they always see post-write row positions.
  */
 function _values(name) {
@@ -1409,31 +1409,7 @@ function getVisitPlan(rmName, month) {
   return out;
 }
 
-function deleteVisitPlan(caller, rmName, month) {
-  const u = _assertCaller(caller);
-  if (!u) return { success: false, message: 'Not authenticated.' };
-  const isSelf = _norm(u.canonicalName) === _norm(rmName);
-  if (!isSelf || !_canPlan(u.role)) {
-    return { success: false, message: 'Only the user can unlock their own plan.' };
-  }
-  if (!month) return { success: false, message: 'Missing month.' };
-  const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
-  try {
-    const sh = _sheet(SHEETS.VISIT_PLAN);
-    if (!sh || sh.getLastRow() < 2) return { success: true, message: 'Nothing to delete.' };
-    const data = sh.getDataRange().getValues();
-    const target = _norm(rmName);
-    for (let i = data.length - 1; i >= 1; i--) {
-      if (_norm(data[i][0]) === target && _monthStr(data[i][1]) === month) {
-        sh.deleteRow(i + 1);
-      }
-    }
-    return { success: true, message: 'Plan cleared for ' + month };
-  } finally {
-    lock.releaseLock();
-  }
-}
+
 
 /**
  * Admin-only: unlock a user's locked plan so they can edit it again.

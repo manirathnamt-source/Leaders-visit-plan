@@ -2563,9 +2563,12 @@ function planSubmitBarHtml(data, canEditPlan, effectivelyLocked){
     // RM/CM viewing someone else
     html += '<span class="locked-indicator">👁️ View-only — you are viewing another user.</span>';
   } else if (data.plan.locked){
+    // Locked means locked. Reopening it is an Admin decision, made from the
+    // Summary tab, not something the owner can do to their own submitted plan.
     html += '<span class="locked-indicator">🔒 Plan locked on ' +
             (data.plan.submittedOn || '—') + '</span>';
-    html += '<button class="btn-danger" onclick="editPlan()">✏️ Edit Plan</button>';
+    html += '<span style="color:var(--muted);font-size:12.5px">' +
+            'Ask an Admin if it needs reopening.</span>';
   } else {
     // Live progress so the user knows what is still unplanned before submitting.
     let visits = 0; const covered = {}, daysUsed = {};
@@ -2893,17 +2896,6 @@ function submitPlan(){
       showToast('Error: ' + err.message, 'error');
     })
     .submitVisitPlan(caller(), currentRM, currentMonth, cells);
-}
-
-function editPlan(){
-  if (!confirm('Unlock the current plan for editing?\nThis will delete the saved plan and let you submit a new one.')) return;
-  google.script.run
-    .withSuccessHandler(res => {
-      if (res.success){ planDirty = false; clearTabCaches(); showToast('Plan unlocked.', 'success'); loadDashboard(); }
-      else showToast(res.message || 'Could not unlock plan.', 'error');
-    })
-    .withFailureHandler(err => showToast('Error: ' + err.message, 'error'))
-    .deleteVisitPlan(caller(), currentRM, currentMonth);
 }
 
 /* ============ PLANNED VS ACTUAL RENDER ============ */
