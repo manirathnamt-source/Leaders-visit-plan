@@ -327,6 +327,13 @@
   .adduser input[type="text"]{flex:1;min-width:190px}
   .adduser select{min-width:170px}
   .note{font-size:11.5px;color:var(--muted);margin:8px 0 14px;line-height:1.5}
+  .rep-h{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+      color:var(--muted);margin:20px 0 9px;display:flex;align-items:center;gap:8px}
+  .rep-h .cnt{background:#fce7ec;color:var(--danger);border-radius:999px;padding:1px 9px;
+      font-size:11px;letter-spacing:0}
+  .delta{font-weight:700;font-size:12px;white-space:nowrap}
+  .delta.up{color:var(--success)} .delta.down{color:var(--danger)}
+  .delta.flat{color:var(--muted);font-weight:500}
   select.urole{padding:4px 8px;font-size:12.5px;border-radius:6px}
 
   /* date filter inside a detail popup */
@@ -720,6 +727,7 @@
     <button class="tab-btn"         data-tab="plan"    onclick="switchTab('plan')">📅 Visit Plan</button>
     <button class="tab-btn"         data-tab="audit"   onclick="switchTab('audit')">🔍 Audit <span id="audit-count" class="badge-count" style="display:none">0</span></button>
     <button class="tab-btn"         data-tab="summary" id="tab-summary" onclick="switchTab('summary')" style="display:none">📊 Summary</button>
+    <button class="tab-btn"         data-tab="compare" onclick="switchTab('compare')">📈 Comparison</button>
     <button class="tab-btn"         data-tab="users"   id="tab-users"   onclick="switchTab('users')"   style="display:none">👥 Users</button>
   </div>
 
@@ -747,6 +755,14 @@
       </div>
     </div>
     <div id="audit-content"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="panel other" id="panel-compare">
+    <div class="panel-head">
+      <h2 id="compare-heading">Month comparison</h2>
+      <button class="btn-secondary" onclick="exportCompareCSV()">📥 Export CSV</button>
+    </div>
+    <div id="compare-content"><div class="empty">Loading…</div></div>
   </div>
 
   <div class="panel other" id="panel-users">
@@ -1334,6 +1350,7 @@ function switchTab(tab){
   $('panel-' + tab).classList.add('active');
   if (tab === 'summary') loadSummary();
   else if (tab === 'users') loadUsers();
+  else if (tab === 'compare') loadCompare();
   else if (tab === 'overview') loadOverview();
   else ensureTabData(tab);
 }
@@ -3090,6 +3107,120 @@ function loadSummary(){
     .getScopeSummary(caller(), currentRange || currentMonth, selectedCluster || '');
 }
 
+/* ============ MONTH COMPARISON ============ */
+let compareCache = null, compareKey = null;
+
+function loadCompare(){
+  const c = $('compare-content');
+  if (!currentRM || !currentMonth) return;
+  const key = actor.name + '|' + currentMonth;
+  if (compareCache && compareKey === key){ renderCompare(compareCache); return; }
+
+  c.innerHTML = '<div class="empty"><span class="spinner"></span> Comparing…</div>';
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || res.error){
+        c.innerHTML = '<div class="empty">' + escapeHtml((res && res.error) || 'Failed') + '</div>';
+        return;
+      }
+      compareCache = res; compareKey = key;
+      renderCompare(res);
+    })
+    .withFailureHandler(err => {
+      c.innerHTML = '<div class="empty">Error: ' + escapeHtml(err.message) + '</div>';
+    })
+    .getVisitComparison(caller(), currentMonth);
+}
+
+function deltaHtml(n, pct){
+  if (n === 0) return '<span class="delta flat">no change</span>';
+  const cls = n > 0 ? 'up' : 'down';
+  return '<span class="delta ' + cls + '">' + (n > 0 ? '▲ +' : '▼ ') + n +
+         (pct === null ? '' : ' (' + (n > 0 ? '+' : '') + pct + '%)') + '</span>';
+}
+
+function renderCompare(d){
+  $('compare-heading').textContent =
+    'Month comparison · ' + monthLabel(d.prevMonth) + ' vs ' + monthLabel(d.month);
+  const t = d.totals;
+  let html = '';
+
+  html += '<div class="ov-kpi-row">';
+  html += ovKpi(monthLabel(d.prevMonth) + ' visits', t.lastMonth);
+  html += ovKpi(monthLabel(d.month) + ' visits', t.thisMonth);
+  html += '<div class="ov-kpi"><div class="ov-kpi-label">Change</div>' +
+          '<div class="ov-kpi-value" style="font-size:20px">' +
+          deltaHtml(t.change, t.changePct) + '</div></div>';
+  html += ovKpi('Stores covered', t.covered + ' / ' + t.stores);
+  html += ovKpi('Not visited', t.notVisited, t.notVisited > 0 ? 'warn' : '');
+  html += '</div>';
+
+  // per person
+  html += '<h3 class="rep-h">By person</h3>';
+  html += '<div class="table-wrap"><table class="data"><thead><tr>' +
+          '<th>Name</th><th>Role</th><th class="r">' + escapeHtml(monthLabel(d.prevMonth)) +
+          '</th><th class="r">' + escapeHtml(monthLabel(d.month)) + '</th><th>Change</th>' +
+          '<th class="r">Stores</th><th class="r">Not visited</th></tr></thead><tbody>';
+  if (!d.rows.length){
+    html += '<tr><td colspan="7" class="empty">Nobody in scope.</td></tr>';
+  }
+  d.rows.forEach(r => {
+    html += '<tr' + (r.notVisited > 0 ? ' class="sev-medium"' : '') + '>' +
+            '<td><b>' + escapeHtml(r.name) + '</b></td>' +
+            '<td>' + escapeHtml(r.role) + '</td>' +
+            '<td class="r">' + r.lastMonth + '</td>' +
+            '<td class="r"><b>' + r.thisMonth + '</b></td>' +
+            '<td>' + deltaHtml(r.change, r.changePct) + '</td>' +
+            '<td class="r">' + r.covered + ' / ' + r.stores + '</td>' +
+            '<td class="r">' + (r.notVisited
+              ? '<span class="badge bad">' + r.notVisited + '</span>' : '0') + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // the detail
+  html += '<h3 class="rep-h">Stores not visited in ' + escapeHtml(monthLabel(d.month)) +
+          ' <span class="cnt">' + d.unvisited.length + '</span></h3>';
+  if (!d.unvisited.length){
+    html += '<div class="empty" style="color:var(--success)">Every mapped store was visited.</div>';
+  } else {
+    html += '<div class="table-wrap" style="max-height:420px;overflow-y:auto">' +
+            '<table class="data"><thead><tr><th>Store</th><th>Owner</th>' +
+            '<th>Last visited</th><th class="r">Days ago</th></tr></thead><tbody>';
+    const today = new Date();
+    d.unvisited.forEach(m => {
+      let days = '—', cls = '';
+      if (m.lastVisit){
+        const dt = new Date(m.lastVisit + 'T00:00:00');
+        const n = Math.round((today - dt) / 86400000);
+        days = n; cls = n > 60 ? 'bad' : (n > 30 ? 'mid' : '');
+      } else { days = 'never'; cls = 'bad'; }
+      html += '<tr><td>' + escapeHtml(m.store) + '</td>' +
+              '<td>' + escapeHtml(m.role) + ' · ' + escapeHtml(m.person) + '</td>' +
+              '<td>' + escapeHtml(m.lastVisit || 'No record') + '</td>' +
+              '<td class="r">' + (cls ? '<span class="badge ' + cls + '">' + days + '</span>'
+                                      : days) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  $('compare-content').innerHTML = html;
+}
+
+function exportCompareCSV(){
+  if (!compareCache) return;
+  const d = compareCache;
+  const rows = [['Month comparison', monthLabel(d.prevMonth) + ' vs ' + monthLabel(d.month)], []];
+  rows.push(['Name','Role',monthLabel(d.prevMonth),monthLabel(d.month),'Change','Stores','Covered','Not visited']);
+  d.rows.forEach(r => rows.push([r.name, r.role, r.lastMonth, r.thisMonth, r.change,
+                                 r.stores, r.covered, r.notVisited]));
+  rows.push([]);
+  rows.push(['Stores not visited in ' + monthLabel(d.month)]);
+  rows.push(['Store','Owner role','Owner','Last visited']);
+  d.unvisited.forEach(m => rows.push([m.store, m.role, m.person, m.lastVisit || 'never']));
+  downloadCSV('Comparison_' + d.month + '.csv', rows);
+  showToast('Report exported', 'success');
+}
+
 /* ============ USERS (Admin) ============ */
 function loadUsers(){
   const c = $('users-content');
@@ -3315,6 +3446,7 @@ function clearTabCaches(){
   summaryCache  = null; summaryKey  = null;
   auditCountKey = null;
   complianceKey = null;
+  compareCache = null; compareKey = null;
   // Per-tab payloads are keyed to the RM, month and range, so when any of those
   // change the parts we are holding are stale. Drop them and let the visible
   // tab refetch; the rest reload as they are opened.
